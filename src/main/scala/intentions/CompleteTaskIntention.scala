@@ -5,10 +5,15 @@ import model._
 
 import scala.collection.mutable
 
-class CompleteTaskIntention(task: Task) extends Intention {
+class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredIntention {
 
   private var blockPlan: List[(Coordinate, String)] = task.requirements.map(r => (Coordinate(r.coordinate.x, r.coordinate.y), r.blockType)).toList
   private var subIntention: Option[Intention] = None
+
+  override def score(observation: Observation): Double = {
+    if (task.deadline <= observation.simulation.getSimulationStep) 0.0
+    else 1.0 + task.reward - observation.currentPos.distanceTo(Coordinate(0,0)) //TO DO task.goal
+  }
 
   override def planNextAction(observation: Observation): AgentAction = {
     // Filter out already satisfied blocks
@@ -54,5 +59,7 @@ class CompleteTaskIntention(task: Task) extends Intention {
   override def checkFinished(observation: Observation): Boolean = {
     blockPlan.isEmpty
   }
+
+
 
 }

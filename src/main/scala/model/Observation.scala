@@ -170,6 +170,30 @@ case class Observation(
     }
   }
 
+  def getClosestFreeGoalZoneForTask(
+                                     currentPos: Coordinate,
+                                     blockRelCoords: Seq[Coordinate],
+                                     goalZones: Set[Coordinate],
+                                     globalMap: mutable.Map[Coordinate, String]
+                                   ): Option[Coordinate] = {
+    val occupied = Set("agent", "block", "marker", "dispenser")
+
+    def isZoneFree(center: Coordinate): Boolean = {
+      val absoluteCoords = blockRelCoords.map(center + _)
+      val surrounding = absoluteCoords.flatMap(_.neighbors(includeDiagonals = false))
+      val allToCheck = Seq(center) ++ absoluteCoords ++ surrounding
+
+      allToCheck.forall(c => globalMap.get(c).forall(v => !occupied.contains(v)))
+    }
+
+    goalZones
+      .filter(isZoneFree)
+      .toSeq
+      .sortBy(_.distanceTo(currentPos))
+      .headOption
+  }
+
+
 
 
 }

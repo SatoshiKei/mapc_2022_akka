@@ -2,12 +2,17 @@ package intentions
 
 import model._
 
-class ExploreIntention() extends Intention {
+class ExploreIntention() extends Intention with ScoredIntention {
 
   private var currentTravelIntention: Option[TravelIntention] = None
   private var detachBlocksIntention: Option[DetachBlocksIntention] = None
   private var adoptRoleIntention: Option[AdoptRoleIntention] = None
   private var relocating: Boolean = false
+  private var estimatedMapSize = 100
+
+  override def score(obs: Observation): Double =
+    if (obs.mapIsFullyExplored) 0.0
+    else 1.0 - (obs.globalMap.size / estimatedMapSize)
 
   override def planNextAction(observation: Observation): AgentAction = {
     // 1. Detach if carrying too many blocks

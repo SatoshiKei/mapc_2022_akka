@@ -2,9 +2,14 @@ package intentions
 
 import model.{AgentAction, Observation}
 
-class AdoptRoleIntention(roleName: String) {
+class AdoptRoleIntention(roleName: String) extends ScoredIntention {
 
   var finished: Boolean = false
+
+  override def score(obs: Observation): Double = {
+    if (obs.currentRole.contains(roleName)) 0.0
+    else 0.7
+  }
 
   def planNextAction(observation: Observation): AgentAction = {
     observation.currentRole match {

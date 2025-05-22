@@ -1,0 +1,7 @@
+package intentions
+
+trait IntentionCategory
+case object Exploration extends IntentionCategory
+case object TaskExecution extends IntentionCategory
+case object RoleAdoption extends IntentionCategory
+case object ResourceGathering extends IntentionCategory

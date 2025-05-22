@@ -34,7 +34,7 @@ package actors {
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
-      intentionHandler.initialize()
+//      intentionHandler.initialize()
       // Send auth-request
       val authRequest = Json.obj(
         "type" -> Json.fromString("auth-request"),

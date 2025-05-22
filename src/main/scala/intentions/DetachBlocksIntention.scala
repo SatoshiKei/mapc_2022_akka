@@ -2,9 +2,18 @@ package intentions
 
 import model.{AgentAction, Coordinate, Observation}
 
-class DetachBlocksIntention {
+class DetachBlocksIntention extends ScoredIntention {
 
   var finished: Boolean = false
+
+  override def score(observation: Observation): Double = {
+    // Simple logic: if carrying too many blocks, high urgency
+    val max = observation.simulation.getMaxBlockRegulation.getOrElse(3)
+    val n = observation.attached.size
+    if (n == 0) 0.0
+    else if (n > max) 1.0
+    else n.toDouble / max
+  }
 
   def planNextAction(observation: Observation): AgentAction = {
     if (observation.things.isEmpty) {
