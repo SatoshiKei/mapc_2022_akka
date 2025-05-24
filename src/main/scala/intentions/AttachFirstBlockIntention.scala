@@ -9,12 +9,13 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
 
   private var targetCoord: Option[Coordinate] = None
   private var travelIntention: Option[TravelIntention] = None
+  private var roleIntention: Option[AdoptRoleIntention] = None
   private var finished: Boolean = false
 
   override def planNextAction(observation: Observation): AgentAction = {
     if (finished) return SkipAction()
 
-    // Step 1: Determine target block coordinate if not yet selected
+    // Step 1: Determine target block coordinate
     if (targetCoord.isEmpty) {
       val abandoned = findAbandonedBlock(observation)
       val dispenser = observation.findClosestDispenser(blockType)
@@ -23,54 +24,62 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
         case (Some(a), Some(d)) =>
           val from = observation.currentPos
           targetCoord = Some(if (from.manhattanDistance(a) <= from.manhattanDistance(d)) a else d)
-        case (Some(a), None) =>
-          targetCoord = Some(a)
-        case (None, Some(d)) =>
-          targetCoord = Some(d)
-        case _ =>
-          return SkipAction()
+        case (Some(a), None) => targetCoord = Some(a)
+        case (None, Some(d)) => targetCoord = Some(d)
+        case _ => return SkipAction()
       }
     }
 
     val target = targetCoord.get
-    val adjacent = observation.currentPos.neighbors(includeDiagonals = false).contains(target)
+    val isAdjacent = observation.currentPos.neighbors(includeDiagonals = false).contains(target)
 
-    // Step 2: If not adjacent, travel
-    if (!adjacent) {
+    // Step 2: Move adjacent
+    if (!isAdjacent) {
       if (travelIntention.isEmpty || travelIntention.get.target != target) {
         travelIntention = Some(new TravelIntention(target))
       }
       return travelIntention.get.planNextAction(observation)
     }
 
-    // Step 3: Now we are adjacent → decide what to do
+    // Step 3: At target — check type of entity
     val value = observation.globalMap.getOrElse(target, "empty")
 
     value match {
       case "dispenser" =>
+        // Ensure we have the right role
+        if (!hasAttachRequestRole(observation)) {
+          if (roleIntention.isEmpty)
+            roleIntention = Some(new AdoptRoleIntention("worker")) // adjust if logic allows better role guess
+          return roleIntention.get.planNextAction(observation)
+        }
         finished = true
         RequestAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "block" =>
-        // If it's the wrong type, clear it
         if (!observation.globalMap.get(target).contains(blockType)) {
           return ClearAction(observation.currentPos.toRelative(target))
         }
-        // Otherwise, attach it
+        if (!hasAttachRequestRole(observation)) {
+          if (roleIntention.isEmpty)
+            roleIntention = Some(new AdoptRoleIntention("worker"))
+          return roleIntention.get.planNextAction(observation)
+        }
         finished = true
         AttachAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "empty" =>
-        // Wait or retry later if nothing there
         return SkipAction()
 
       case _ =>
-        // If blocked by another entity or obstacle
         return ClearAction(observation.currentPos.toRelative(target))
     }
   }
 
   override def checkFinished(observation: Observation): Boolean = finished
+
+  private def hasAttachRequestRole(observation: Observation): Boolean = {
+    observation.currentRole.contains("worker") || observation.currentRole.contains("constructor")
+  }
 
   private def findAbandonedBlock(observation: Observation): Option[Coordinate] = {
     observation.things.collect {
@@ -84,3 +93,4 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
     }.flatten.headOption
   }
 }
+

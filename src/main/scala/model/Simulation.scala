@@ -1,6 +1,6 @@
 package model
 
-import model.RegulationType.RegulationType
+import model.NormRequirementType.NormRequirementType
 
 import scala.collection.mutable
 
@@ -20,6 +20,13 @@ class Simulation(val teamName: String) {
   def setReservedRoles(roles: Map[String, Role]): Unit = {
     reservedRoles = roles
   }
+
+  def getMaxAllowedAgentsForRole(roleName: String): Option[Int] = {
+    getActiveNormRequirements("role")
+      .find(_.name == roleName)
+      .map(_.quantity)
+  }
+
 
   def normHandleInterval: Int = 20
 
@@ -75,26 +82,28 @@ class Simulation(val teamName: String) {
     newNorms.foreach { norm =>
       if (!norms.contains(norm.name)) norms(norm.name) = norm
     }
-    norms.retain { case (_, norm) => norm.untilStep >= simulationStep }
+    norms.retain { case (_, norm) => norm.until >= simulationStep }
   }
 
   def getNorms(needHandled: Boolean, needConsidered: Option[Boolean] = None): Seq[Norm] = {
     norms.values.toSeq.filter { n =>
-      n.startStep <= simulationStep + normHandleInterval &&
+      n.start <= simulationStep + normHandleInterval &&
         n.handled == needHandled &&
         (needConsidered.isEmpty || n.considered == needConsidered.get)
     }
   }
 
-  def getNormsRegulations(normsList: Seq[Norm], regulationType: Option[RegulationType] = None): Seq[NormRegulation] = {
-    normsList.flatMap(_.regulations).filter(r => regulationType.forall(_ == r.regType))
+  def getNormRequirements(normsList: Seq[Norm], regulationType: Option[String] = None): Seq[NormRequirement] = {
+    normsList.flatMap(_.requirements).filter(r => regulationType.forall(_ == r.`type`))
   }
 
-  def getActiveRegulations(regulationType: RegulationType): Seq[NormRegulation] = {
+
+  def getActiveNormRequirements(regulationType: String): Seq[NormRequirement] = {
     getNorms(needHandled = true, needConsidered = Some(true))
-      .flatMap(_.regulations)
-      .filter(_.regType == regulationType)
+      .flatMap(_.requirements)
+      .filter(_.`type` == regulationType)
   }
+
 
   def setMapCount(value: Int): Unit = {
     mapCount = Some(value)
@@ -113,8 +122,37 @@ class Simulation(val teamName: String) {
     }
   }
 
+  def hasActiveNormFor(requirementType: String, name: String): Boolean = {
+    getActiveNormRequirements(requirementType).exists(_.name == name)
+  }
+
+  def getPunishmentForNorm(requirementType: String, name: String): Option[Int] = {
+    getNorms(needHandled = true, needConsidered = Some(true))
+      .find(_.requirements.exists(r => r.`type` == requirementType && r.name == name))
+      .map(_.punishment)
+  }
+
+  def getTasksSortedByDeadline: Seq[Task] = tasks.toSeq.sortBy(_.deadline)
+
+  def getTasksSortedByReward: Seq[Task] = tasks.toSeq.sortBy(-_.reward)
+
+  def isNormActive(norm: Norm): Boolean = {
+    norm.start <= simulationStep &&
+      norm.until >= simulationStep &&
+      norm.considered &&
+      norm.handled
+  }
+
+
+  def reset(): Unit = {
+    tasks = Set.empty
+    norms.clear()
+    reservedRoles = Map.empty
+    simulationStep = 0
+  }
+
   def getMaxBlockRegulation: Option[Int] = {
-    getActiveRegulations(RegulationType.BLOCK).map(_.regQuantity).filter(_ != 2).sorted.headOption
+    getActiveNormRequirements("block").map(_.quantity).filter(_ != 2).sorted.headOption
   }
 
   def getReservedRoles(): Map[String, Role] = {

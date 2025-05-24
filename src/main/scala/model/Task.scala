@@ -4,7 +4,7 @@ case class Task(
                  name: String,
                  deadline: Int,
                  reward: Int,
-                 requirements: List[Requirement]
+                 requirements: List[TaskRequirement]
                ) {
 
   override def equals(other: Any): Boolean = other match {

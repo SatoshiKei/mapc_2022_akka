@@ -30,7 +30,7 @@ package actors {
     val targetPosition: Coordinate = Coordinate(0, 0)
     var globalMap: mutable.Map[Coordinate, String] = mutable.Map.empty
     var orientation: String = "n"
-
+    var currentRole: String = "std"
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -88,7 +88,7 @@ package actors {
                 }
 
 
-                println(s"Last Action: $agentName/$energy ($lastAction/$lastActionParams) [$lastActionResult]")
+                println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
                 println("Sending action: " + action.noSpaces)
 
               case "sim-end" =>
@@ -138,7 +138,7 @@ package actors {
 
       // Default position (could be updated later if available)
       val currentPos = globalPosition
-      println(agentName + " position: " + currentPos)
+//      println(agentName + " position: " + currentPos)
 
       // Energy
       val energy = percept.get[Int]("energy").getOrElse(0)
@@ -163,6 +163,7 @@ package actors {
 
       // Current Role (optional)
       val currentRole = percept.get[String]("role").toOption
+      this.currentRole = currentRole.get
 
       // Norms (optional)
       val norms = percept.get[Vector[Norm]]("norms").getOrElse(Vector())
@@ -176,7 +177,24 @@ package actors {
           } yield agent -> role
         }.toMap
 
-      // Build simulation and update data
+      // Goal Zones
+      val goalZones: Set[Coordinate] =
+        percept.get[Vector[(Int, Int)]]("goalZones")
+          .getOrElse(Vector())
+          .map { case (x, y) =>
+            // Convert relative to absolute
+            globalPosition + Coordinate(x, y).rotateToFacing(orientation)
+          }
+          .toSet
+
+      // Role Zones
+      val roleZones: Set[Coordinate] =
+        percept.get[Vector[(Int, Int)]]("roleZones")
+          .getOrElse(Vector())
+          .map { case (x, y) =>
+            globalPosition + Coordinate(x, y).rotateToFacing(orientation)
+          }
+          .toSet
       val sim = new Simulation(teamName = percept.get[String]("team").getOrElse("A"))
       sim.setSimulationStep(step)
       sim.updateTasks(tasks)
@@ -198,7 +216,9 @@ package actors {
         roles = roles,
         currentRole = currentRole,
         globalMap = globalMap,
-        simulation = sim
+        simulation = sim,
+        goalZones = goalZones,
+        roleZones = roleZones
       )
     }
 
@@ -215,7 +235,7 @@ package actors {
 
       // Update global map from observation
       globalMap = observation.globalMap
-      println(agentName + " Map Size: " + globalMap.size)
+//      println(agentName + " Map: " + globalMap)
 
       Json.obj(
         "type" -> Json.fromString("action"),

@@ -54,6 +54,17 @@ case class Coordinate(x: Int, y: Int) {
     }
   }
 
+  def toDirection: Option[String] = {
+    (x, y) match {
+      case (0, -1) => Some("n")
+      case (0, 1)  => Some("s")
+      case (1, 0)  => Some("e")
+      case (-1, 0) => Some("w")
+      case _       => None
+    }
+  }
+
+
   def rotateToFacing(facing: String): Coordinate = facing match {
     case "n" => this
     case "e" => Coordinate(-y, x)

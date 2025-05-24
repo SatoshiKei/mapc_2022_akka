@@ -24,6 +24,12 @@ class IntentionHandler() {
     val candidates = fallbackIntentions ++ discoverNewIntentions(observation)
     val best = candidates.maxBy(_.score(observation))
 
+    // Step 0: Check if this agent is violating any role-based norm
+    if (violatesRoleNorm(observation)) {
+      currentIntention = Some(new DetachBlocksIntention()) // or new ExploreIntention() as fallback
+      return
+    }
+
     val currentScore = currentIntention.map(_.score(observation)).getOrElse(Double.MinValue)
     if (currentIntention.isEmpty || currentIntention.get.checkFinished(observation) ||
       best.score(observation) > currentScore + hysteresis) {
@@ -73,22 +79,55 @@ class IntentionHandler() {
   }
 
   private def getTaskIntentionIfVisible(observation: Observation): Seq[ScoredIntention] = {
-    observation.simulation.getTasks.map(t => new CompleteTaskIntention(t, Coordinate(0,0))) //TO DO Task Goal
+    observation.simulation.getTasks.map(t => new CompleteTaskIntention(t, Coordinate(0,0)))
   }
 
   private def discoverNewIntentions(observation: Observation): Seq[ScoredIntention] = {
-    val taskIntentions: Seq[ScoredIntention] = observation.simulation.getTasks.map { task =>
-      new CompleteTaskIntention(task, Coordinate(0,0))
+    val knownGoalZones = observation.goalZones
+
+    val normIntentions = observation.simulation.getActiveNormRequirements("role").flatMap { req =>
+      val current = observation.currentRole.getOrElse("default")
+      if (current == req.name) {
+        Some(new AdoptRoleIntention("default")) // fallback role to avoid violation
+      } else None
+    } ++ observation.simulation.getActiveNormRequirements("block").flatMap { req =>
+      if (observation.attached.size > req.quantity)
+        Some(new DetachBlocksIntention())
+      else None
     }
 
-    val roleIntentions: Seq[ScoredIntention] = observation.simulation.getReservedRoles().get(observation.agentId)
+    val taskIntentions = if (knownGoalZones.nonEmpty) {
+      observation.simulation.getTasks.map { task =>
+        val goal = findClosestFreeGoalZone(observation.currentPos, knownGoalZones, task)
+        new CompleteTaskIntention(task, goal)
+      }
+    } else Seq.empty
+
+    val roleIntentions = observation.simulation.getReservedRoles().get(observation.agentId)
       .filterNot(role => observation.currentRole.contains(role.name))
       .map(role => new AdoptRoleIntention(role.name)).toSeq
 
-    val detachIfOverloaded: Seq[ScoredIntention] = if (observation.attached.size > 2)
-      Seq(new DetachBlocksIntention()) else Seq()
+    val detachIfOverloaded = if (observation.attached.size > 2) Seq(new DetachBlocksIntention()) else Seq()
 
     taskIntentions ++ roleIntentions ++ detachIfOverloaded
   }
+
+  private def findClosestFreeGoalZone(currentPos: Coordinate, goalZones: Set[Coordinate], task: Task): Coordinate = {
+    //TODO consider changing to avoid crowded zones
+    goalZones.minBy(_.distanceTo(currentPos))
+  }
+
+  private def violatesRoleNorm(observation: Observation): Boolean = {
+    val reservedRoles = observation.simulation.getReservedRoles()
+    val activeRoleNorms = observation.simulation.getActiveNormRequirements("role")
+
+    activeRoleNorms.exists { norm =>
+      val agentsWithThisRole = reservedRoles.values.count(_.name == norm.name)
+      agentsWithThisRole > norm.quantity && observation.currentRole.contains(norm.name)
+    }
+  }
+
+
+
 
 }

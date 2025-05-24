@@ -1,6 +1,6 @@
 package model
 
-case class Requirement(
+case class TaskRequirement(
                  coordinate: Coordinate,
                  detail: String,
                  blockType: String,

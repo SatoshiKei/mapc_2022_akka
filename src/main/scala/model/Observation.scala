@@ -12,7 +12,9 @@ case class Observation(
                         roles: Vector[Role],
                         currentRole: Option[String],
                         simulation: Simulation,
-                        globalMap: mutable.Map[Coordinate, String]
+                        globalMap: mutable.Map[Coordinate, String],
+                        goalZones: Set[Coordinate],
+                        roleZones: Set[Coordinate]
                       ) {
 
   def hasRole(roleName: String): Boolean = {
@@ -57,6 +59,16 @@ case class Observation(
         globalMap.update(abs, "empty")
       }
     }
+
+    goalZones.foreach { coord =>
+      globalMap.update(coord, "goal")
+    }
+    roleZones.foreach { coord =>
+      globalMap.update(coord, "role")
+    }
+    println("Role Zones: " + roleZones.size + " Goal Zones: "+ goalZones.size + " Global Map: " + globalMap.size)
+
+
   }
 
 

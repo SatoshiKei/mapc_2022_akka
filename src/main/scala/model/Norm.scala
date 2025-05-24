@@ -2,10 +2,11 @@ package model
 
 case class Norm(
                  name: String,
-                 startStep: Int,
-                 untilStep: Int,
+                 start: Int,
+                 until: Int,
+                 level: String,
+                 requirements: Seq[NormRequirement],
                  punishment: Int,
-                 regulations: Seq[NormRegulation],
                  var handled: Boolean = false,
                  var considered: Boolean = true
                ) {
