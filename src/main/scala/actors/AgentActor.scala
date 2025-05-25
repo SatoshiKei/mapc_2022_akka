@@ -31,6 +31,7 @@ package actors {
     var globalMap: mutable.Map[Coordinate, String] = mutable.Map.empty
     var orientation: String = "n"
     var currentRole: String = "std"
+    var allRoles: Vector[Role] = Vector()
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -61,8 +62,12 @@ package actors {
                 println("✅ Authenticated.")
 
               case "sim-start" =>
+                val percept = json.hcursor.downField("content").downField("percept")
+//                println("Percept: " + json)
+                val allRoles = percept.get[Vector[Role]]("roles").getOrElse(Vector())
+                this.allRoles = allRoles
                 println("🚀 Simulation started.")
-
+//                println("Roles: " + roles + allRoles)
               case "request-action" =>
                 val action = handleActionRequest(json)
                 sendMessage(action)
@@ -199,6 +204,7 @@ package actors {
       sim.setSimulationStep(step)
       sim.updateTasks(tasks)
       sim.updateNorms(norms)
+      sim.setAllRoles(allRoles)
       reservedRoles.foreach { case (agent, role) =>
         sim.getReservedRoles() + (agent -> role) // merge
       }

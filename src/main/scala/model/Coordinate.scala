@@ -91,6 +91,11 @@ case class Coordinate(x: Int, y: Int) {
   def distanceTo(other: Coordinate): Double =
     math.sqrt(math.pow(x - other.x, 2) + math.pow(y - other.y, 2))
 
+  def isAdjacentTo(other: Coordinate): Boolean = {
+    val dx = Math.abs(this.x - other.x)
+    val dy = Math.abs(this.y - other.y)
+    dx + dy == 1
+  }
 
   def euclideanDistance(other: Coordinate): Double =
     math.hypot(x - other.x, y - other.y)

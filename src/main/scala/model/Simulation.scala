@@ -9,6 +9,7 @@ class Simulation(val teamName: String) {
 //  private var staticPercept: Option[StaticPercept] = None
   private var tasks: Set[Task] = Set.empty
   private var norms: mutable.Map[String, Norm] = mutable.Map.empty
+  private var allRoles: Vector[Role] = Vector()
 
   private var agentMaxEnergy: Int = 0
   private var clearEnergyCost: Option[Double] = None
@@ -19,6 +20,10 @@ class Simulation(val teamName: String) {
 
   def setReservedRoles(roles: Map[String, Role]): Unit = {
     reservedRoles = roles
+  }
+
+  def setAllRoles(roles: Vector[Role]): Unit = {
+    allRoles = roles
   }
 
   def getMaxAllowedAgentsForRole(roleName: String): Option[Int] = {
@@ -158,4 +163,32 @@ class Simulation(val teamName: String) {
   def getReservedRoles(): Map[String, Role] = {
     reservedRoles
   }
+
+  //TODO - Consider role count from all agents to determine norm violation
+  def getAllowedFallbackRoles(currentRole: Option[String]): Seq[String] = {
+    // Get norm-imposed limits on roles
+    val roleLimits: Map[String, Int] =
+      getActiveNormRequirements("role").map(r => r.name -> r.quantity).toMap
+
+    // Dynamically score roles by usefulness (e.g., number of unique actions, speed, vision)
+    def roleScore(role: Role): Int = {
+      val actionScore = role.actions.toSeq.distinct.size
+      val speedScore = role.speed.headOption.get
+      val visionScore = role.vision
+      actionScore + speedScore + visionScore
+    }
+
+    // Filter out current role, and restrict roles that are explicitly prohibited by norms
+    val allowedRoles = allRoles.filter { role =>
+      val notCurrent = !currentRole.contains(role.name)
+      val isNotBannedByNorm = !roleLimits.contains(role.name) || roleLimits(role.name) > 0
+      notCurrent && isNotBannedByNorm
+    }
+
+    // Sort the allowed roles by dynamic score (descending)
+    allowedRoles.sortBy(role => -roleScore(role)).map(_.name)
+  }
+
+
+
 }

@@ -3,10 +3,9 @@ package model
 case class Role(
                  name: String,
                  vision: Int,
-                 clearChance: Double,
-                 clearMaxDistance: Int,
                  actions: Set[String],
-                 speed: Seq[Int]
+                 speed: Vector[Integer],
+                 clear: ClearAbility
                ) {
 
   def canPerformAction(action: String): Boolean = {
@@ -18,9 +17,10 @@ case class Role(
     math.min(speed(index), 2)
   }
 
-  def getFreeSpeed: Int = {
-    math.min(speed.headOption.getOrElse(1), 2)
-  }
-
   override def toString: String = name
 }
+
+  case class ClearAbility(
+                           chance: Double,
+                           maxDistance: Int
+                         )

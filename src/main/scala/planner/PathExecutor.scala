@@ -35,7 +35,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
         val direction = observation.currentPos.toDirection(nextCoord)
         direction match {
           case Some(desiredDir) =>
-//            println(s"[DEBUG] Current orientation: ${observation.orientation}, Desired: $desiredDir")
+            println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir")
             if (desiredDir != observation.orientation) {
               val rotation = computeRotation(observation.orientation, desiredDir)
               return rotation.map(RotateAction(_)).getOrElse(SkipAction())
@@ -112,6 +112,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     val diff = (targetIdx - currentIdx + 4) % 4
     diff match {
       case 1 => Some("cw")
+      case 2 => Some("cw")
       case 3 => Some("ccw")
       case _ => None // no rotation needed or 180° turn (unsupported)
     }

@@ -66,13 +66,22 @@ case class Observation(
     roleZones.foreach { coord =>
       globalMap.update(coord, "role")
     }
-    println("Role Zones: " + roleZones.size + " Goal Zones: "+ goalZones.size + " Global Map: " + globalMap.size)
+    val roleCoords = globalMap.filter(_._2 == "role").keys.toSeq
+    val goalCoords = globalMap.filter(_._2 == "goal").keys.toSeq
+
+    println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size)
+
 
 
   }
 
+  def getKnownRoleZones: Set[Coordinate] = {
+    globalMap.filter(_._2 == "role").keys.toSet
+  }
 
-
+  def getKnownGoalZones: Set[Coordinate] = {
+    globalMap.filter(_._2 == "goal").keys.toSet
+  }
 
   def isUnknown(coord: Coordinate): Boolean = {
     !globalMap.contains(coord)
