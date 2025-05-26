@@ -8,18 +8,12 @@ case class Observation(
                         energy: Int,
                         things: Vector[Thing],
                         attached: Vector[Coordinate],
-                        visionRadius: Int,
-                        roles: Vector[Role],
                         currentRole: Option[String],
                         simulation: Simulation,
                         globalMap: mutable.Map[Coordinate, String],
                         goalZones: Set[Coordinate],
                         roleZones: Set[Coordinate]
                       ) {
-
-  def hasRole(roleName: String): Boolean = {
-    roles.exists(_.name == roleName)
-  }
 
   def getBlockedDirections: Set[String] = {
     val directionOffsets = Map(
@@ -37,14 +31,18 @@ case class Observation(
   }
 
   def updateKnownMap(): Unit = {
+
+    val allRoleZones = getKnownRoleZones
+
+
     for (thing <- things) {
       val relative = Coordinate(thing.x, thing.y)
-      val rotated = relative.rotateToFacing(orientation)
+      val rotated = relative
       val absolute = currentPos + rotated
       globalMap.update(absolute, thing.`type`) // Always update; latest observation is most accurate
     }
 
-    // Also record the agent's own current position as "entity"
+    // Also record the agent's own current position as "entity" TODO - Is this necessary?
     globalMap.update(currentPos, "entity")
 
     // Mark empty tiles within vision that are not occupied by anything
@@ -54,8 +52,8 @@ case class Observation(
       if math.abs(dx) + math.abs(dy) <= visionRadius
     } {
       val rel = Coordinate(dx, dy)
-      val abs = currentPos + rel.rotateToFacing(orientation)
-      if (!things.exists(t => t.x == dx && t.y == dy)) {
+      val abs = currentPos + rel
+      if (!things.exists(t => t.x == dx && t.y == dy) && math.abs(dx) + math.abs(dy) <= visionRadius) {
         globalMap.update(abs, "empty")
       }
     }
@@ -64,15 +62,22 @@ case class Observation(
       globalMap.update(coord, "goal")
     }
     roleZones.foreach { coord =>
+      println(agentId + " set " + coord + " as role zone")
       globalMap.update(coord, "role")
     }
-    val roleCoords = globalMap.filter(_._2 == "role").keys.toSeq
-    val goalCoords = globalMap.filter(_._2 == "goal").keys.toSeq
+
+    for (roleZone <- allRoleZones) {
+      if (globalMap(roleZone) != "role") {
+        println(agentId + " " + currentPos + " role zone at " + roleZone + " is set as " + globalMap(roleZone))
+      }
+    }
+
 
     println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size)
+  }
 
-
-
+  def visionRadius: Int = {
+    simulation.getAllRoles.find(role => role.name == currentRole.get).get.vision
   }
 
   def getKnownRoleZones: Set[Coordinate] = {
@@ -151,7 +156,7 @@ case class Observation(
   def findClosestDispenser(blockType: String): Option[Coordinate] = {
     things.collect {
       case t if t.`type` == "dispenser" && t.details == blockType =>
-        val relative = Coordinate(t.x, t.y).rotateToFacing(orientation)
+        val relative = Coordinate(t.x, t.y)
         currentPos + relative
     }.sortBy(_.manhattanDistance(currentPos)).headOption
   }

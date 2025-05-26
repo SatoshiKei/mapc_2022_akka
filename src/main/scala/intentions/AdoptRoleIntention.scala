@@ -18,20 +18,22 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
       return AgentAction("skip")
     }
 
+    if (observation.getKnownRoleZones.isEmpty) {
+      return new ExploreIntention().planNextAction(observation)
+    }
+
     if (travel.isDefined && travel.get.target != observation.currentPos) {
       return travel.get.planNextAction(observation)
     }
 
-
-    // Step 2: Check if adjacent to any roleZone
-    val adjacentZoneOpt = observation.getKnownRoleZones.find { rz =>
-      observation.currentPos.isAdjacentTo(rz)
+    // Step 2: Check if in any roleZone
+    val inRoleZone = observation.getKnownRoleZones.find { rz =>
+      observation.currentPos == rz
     }
 
-    adjacentZoneOpt match {
+    inRoleZone match {
       case Some(_) =>
-        // We're adjacent to a role zone — adopt!
-        return AgentAction("adopt", Seq(roleName))
+        AgentAction("adopt", Seq(roleName))
 
       case None =>
         // Need to move closer
@@ -48,7 +50,7 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
 
           case None =>
             // No known role zone → skip (or fallback to Explore)
-            println("No known role zone")
+            println(observation.agentId + " is not in a role zone")
             return AgentAction("skip")
         }
     }

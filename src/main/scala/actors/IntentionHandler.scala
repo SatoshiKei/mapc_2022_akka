@@ -9,16 +9,10 @@ import scala.collection.mutable.PriorityQueue
 class IntentionHandler() {
 
 //  private val intentions = PriorityQueue.empty[ScoredIntention](Ordering.by(-_.score))
-
   private var currentIntention: Option[ScoredIntention] = None
   private val fallbackIntentions: Seq[ScoredIntention] = Seq(new ExploreIntention())
   var hysteresis = 0.5
 
-  // Insert base intentions like Explore and Idle
-//  def initialize(): Unit = {
-//    insertIntention(new ExploreIntention())
-//    insertIntention(new IdleIntention())
-//  }
 
   private def evaluateAndMaybeSwitch(observation: Observation): Unit = {
     // 1. Handle norm violations FIRST
@@ -49,32 +43,6 @@ class IntentionHandler() {
   }
 
 
-  //  def reevaluateIntentions(observation: Observation): Unit = {
-//    val scored = intentions.map { case ScoredIntention(intention, _) =>
-//      ScoredIntention(intention, intention.score(observation))
-//    }.toSeq
-//
-//    currentIntention match {
-//      case Some(ci) if !ci.checkFinished(observation) =>
-//        val ciPriority = ci.asInstanceOf[ScoredIntention].score(observation)
-//        val highest = scored.maxBy(_.priority)
-//
-//        if (highest.priority > ciPriority + hysteresis) {
-//          currentIntention = Some(highest.intention)
-//        }
-//      case _ =>
-//        val highest = scored.maxBy(_.priority)
-//        currentIntention = Some(highest.intention)
-//    }
-//  }
-
-
-
-//  def planNextAction(observation: Observation): AgentAction = {
-//    val intention: Intention = getCurrentIntention(observation).getOrElse(new IdleIntention())
-//    intention.planNextAction(observation)
-//  }
-
   def planNextAction(observation: Observation): AgentAction = {
     val old = currentIntention
     evaluateAndMaybeSwitch(observation)
@@ -103,6 +71,7 @@ class IntentionHandler() {
     // If agent knows role zones but no goal zones and has a worse role (like "default"), adopt a better one
     val adoptBetterRoleIfIdle: Seq[ScoredIntention] =
       if (knownGoalZones.isEmpty && knownRoleZones.nonEmpty && currentRole == "default") {
+        println(observation.agentId + " intends to adopt a better role")
         val fallback = observation.simulation.getAllowedFallbackRoles(Some("default"))
         fallback.headOption.map(role => new AdoptRoleIntention(role)).toSeq
       } else Seq.empty

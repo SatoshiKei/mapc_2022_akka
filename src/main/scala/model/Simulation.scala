@@ -81,6 +81,8 @@ class Simulation(val teamName: String) {
 
   def getTasks: Seq[Task] = tasks.toSeq
 
+  def getAllRoles: Vector[Role] = allRoles
+
   def hasTaskExpired(task: Task): Boolean = !tasks.contains(task)
 
   def updateNorms(newNorms: Seq[Norm]): Unit = {

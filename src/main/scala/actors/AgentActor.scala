@@ -154,12 +154,6 @@ package actors {
       // Attachment
       val attached = percept.get[Vector[(Int, Int)]]("attached").getOrElse(Vector()).map { case (x, y) => Coordinate(x, y) }
 
-      // Roles
-      val roles = percept.get[Vector[Role]]("roles").getOrElse(Vector())
-
-      // Vision radius (from first role if any)
-      val visionRadius = roles.headOption.map(_.vision).getOrElse(5)
-
       // Simulation step
       val step = content.get[Int]("step").getOrElse(0)
 
@@ -187,7 +181,6 @@ package actors {
         percept.get[Vector[(Int, Int)]]("goalZones")
           .getOrElse(Vector())
           .map { case (x, y) =>
-            // Convert relative to absolute
             globalPosition + Coordinate(x, y).rotateToFacing(orientation)
           }
           .toSet
@@ -197,9 +190,10 @@ package actors {
         percept.get[Vector[(Int, Int)]]("roleZones")
           .getOrElse(Vector())
           .map { case (x, y) =>
-            globalPosition + Coordinate(x, y).rotateToFacing(orientation)
+            globalPosition + Coordinate(x, y)
           }
           .toSet
+      println("Current: " + globalPosition + "Percept: " + percept.get[Vector[(Int, Int)]]("roleZones") + " roleZones: " + roleZones)
       val sim = new Simulation(teamName = percept.get[String]("team").getOrElse("A"))
       sim.setSimulationStep(step)
       sim.updateTasks(tasks)
@@ -218,8 +212,6 @@ package actors {
         energy = energy,
         things = things,
         attached = attached,
-        visionRadius = visionRadius,
-        roles = roles,
         currentRole = currentRole,
         globalMap = globalMap,
         simulation = sim,
