@@ -84,13 +84,13 @@ package actors {
                   orientation = rotateDirection(orientation, lastActionParams)
                 }
 
-                if (lastAction == "clear" && lastActionResult == "success") {
-                  val lastActionCoordinate = globalPosition.fromDirection(lastActionParams)
-                  val dx = lastActionCoordinate.x
-                  val dy = lastActionCoordinate.y
-                  val clearedCoord = globalPosition + Coordinate(dx, dy)
-                  globalMap.update(clearedCoord, "cleared")
-                }
+//                if (lastAction == "clear" && lastActionResult == "success") {
+//                  val lastActionCoordinate = globalPosition.fromDirection(lastActionParams)
+//                  val dx = lastActionCoordinate.x
+//                  val dy = lastActionCoordinate.y
+//                  val clearedCoord = globalPosition + Coordinate(dx, dy)
+//                  globalMap.update(clearedCoord, "cleared")
+//                }
 
 
                 println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
@@ -150,6 +150,7 @@ package actors {
 
       // Things
       val things = parseThings(percept)
+      println(agentName + "'s things: " + things)
 
       // Attachment
       val attached = percept.get[Vector[(Int, Int)]]("attached").getOrElse(Vector()).map { case (x, y) => Coordinate(x, y) }
@@ -181,7 +182,7 @@ package actors {
         percept.get[Vector[(Int, Int)]]("goalZones")
           .getOrElse(Vector())
           .map { case (x, y) =>
-            globalPosition + Coordinate(x, y).rotateToFacing(orientation)
+            globalPosition + Coordinate(x, y)
           }
           .toSet
 
