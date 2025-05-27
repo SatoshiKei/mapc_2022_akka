@@ -29,6 +29,8 @@ package actors {
     var globalPosition: Coordinate = Coordinate(0, 0)
     val targetPosition: Coordinate = Coordinate(0, 0)
     var globalMap: mutable.Map[Coordinate, String] = mutable.Map.empty
+    var knownRoleZones: Set[Coordinate] = Set.empty
+    var knownGoalZones: Set[Coordinate] = Set.empty
     var orientation: String = "n"
     var currentRole: String = "std"
     var allRoles: Vector[Role] = Vector()
@@ -69,8 +71,7 @@ package actors {
                 println("🚀 Simulation started.")
 //                println("Roles: " + roles + allRoles)
               case "request-action" =>
-                val action = handleActionRequest(json)
-                sendMessage(action)
+
                 val energy = json.hcursor.downField("content").downField("percept").get[Int]("energy").getOrElse(0)
                 val lastActionParams = json.hcursor.downField("content").downField("percept").get[Vector[String]]("lastActionParams").getOrElse(Vector()).mkString(",")
                 val lastAction = json.hcursor.downField("content").downField("percept").get[String]("lastAction").getOrElse("")
@@ -94,8 +95,9 @@ package actors {
 
 
                 println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
+                val action = handleActionRequest(json)
                 println(agentName + " is sending action: " + action.noSpaces)
-
+                sendMessage(action)
               case "sim-end" =>
                 println("🏁 Simulation ended.")
 
@@ -195,6 +197,17 @@ package actors {
           }
           .toSet
       println("Current: " + globalPosition + "Percept: " + percept.get[Vector[(Int, Int)]]("roleZones") + " roleZones: " + roleZones)
+
+
+      goalZones.foreach { coord =>
+        knownGoalZones += coord
+      }
+
+      roleZones.foreach { coord =>
+        knownRoleZones += coord
+      }
+
+
       val sim = new Simulation(teamName = percept.get[String]("team").getOrElse("A"))
       sim.setSimulationStep(step)
       sim.updateTasks(tasks)
@@ -217,7 +230,9 @@ package actors {
         globalMap = globalMap,
         simulation = sim,
         goalZones = goalZones,
-        roleZones = roleZones
+        roleZones = roleZones,
+        knownGoalZones = knownGoalZones,
+        knownRoleZones = knownRoleZones
       )
     }
 
@@ -245,81 +260,6 @@ package actors {
         )
       )
     }
-
-
-
-    //    def handleActionRequest(json: Json): Json = {
-//      val cursor = json.hcursor
-//      val id = cursor.downField("content").get[Int]("id").getOrElse(0)
-//
-//      val observation = createObservation(json)
-//      observation.updateKnownMap()
-//
-//      val action = intentionHandler.planNextAction(observation)
-//      val actionType = action.actionType
-//
-//      //Update global map
-//      globalMap = observation.globalMap
-//      println(agentName + " Map: " + globalMap)
-//
-////      val actionType = decideAction(cursor)
-//
-//      val params = actionType match {
-//        case "move" =>
-//          val things = getThings(cursor)
-//          val blockedDirs = getBlockedDirections(things)
-//          val directions = List("n", "s", "e", "w").filterNot(blockedDirs.contains)
-//          Json.arr(Json.fromString(directions.headOption.getOrElse("n")))
-//        case "rotate" =>
-//          Json.arr(Json.fromString("cw"))
-//
-//        case "attach" =>
-//          val things = getThings(cursor)
-//          val direction = findThingDirection(things, "block")
-//          Json.arr(Json.fromString(direction.getOrElse("n")))
-//
-//        case "detach" =>
-//          Json.arr(Json.fromString("n"))
-//
-//        case "adopt" =>
-//          val roles = cursor.downField("content").downField("percept").get[Vector[Json]]("roles").getOrElse(Vector())
-//          val roleName = roles.headOption.flatMap(_.hcursor.get[String]("name").toOption).getOrElse("worker")
-//          Json.arr(Json.fromString(roleName))
-//
-//        case "clear" =>
-//          val things = getThings(cursor)
-//          val obstacle = things.find(t => t.hcursor.get[String]("type").getOrElse("") == "obstacle")
-//          val (x, y) = getThingCoordinates(obstacle)
-//          Json.arr(Json.fromInt(x), Json.fromInt(y))
-//
-//        case "connect" =>
-//          Json.arr(Json.fromString("agentA2"), Json.fromInt(0), Json.fromInt(1)) // Needs real logic
-//
-//        case "disconnect" =>
-//          Json.arr(Json.fromInt(0), Json.fromInt(1), Json.fromInt(1), Json.fromInt(1))
-//
-//        case "request" =>
-//          val things = getThings(cursor)
-//          val dispenserDir = findThingDirection(things, "dispenser")
-//          Json.arr(Json.fromString(dispenserDir.getOrElse("n")))
-//
-//        case "submit" =>
-//          val tasks = cursor.downField("content").downField("percept").get[Vector[Json]]("tasks").getOrElse(Vector())
-//          val taskName = tasks.headOption.flatMap(_.hcursor.get[String]("name").toOption).getOrElse("task0")
-//          Json.arr(Json.fromString(taskName))
-//
-//        case _ => Json.arr()
-//      }
-//
-//      Json.obj(
-//        "type" -> Json.fromString("action"),
-//        "content" -> Json.obj(
-//          "id" -> Json.fromInt(id),
-//          "type" -> Json.fromString(actionType),
-//          "p" -> params
-//        )
-//      )
-//    }
 
     def getThings(cursor: HCursor): Vector[Json] = {
       cursor.downField("content").downField("percept").get[Vector[Json]]("things").getOrElse(Vector())

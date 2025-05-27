@@ -12,7 +12,9 @@ case class Observation(
                         simulation: Simulation,
                         globalMap: mutable.Map[Coordinate, String],
                         goalZones: Set[Coordinate],
-                        roleZones: Set[Coordinate]
+                        roleZones: Set[Coordinate],
+                        knownGoalZones: Set[Coordinate],
+                        knownRoleZones: Set[Coordinate]
                       ) {
 
   def getBlockedDirections: Set[String] = {
@@ -31,10 +33,6 @@ case class Observation(
   }
 
   def updateKnownMap(): Unit = {
-
-    val allRoleZones = getKnownRoleZones
-
-
     for (thing <- things) {
       val relative = Coordinate(thing.x, thing.y)
       val rotated = relative
@@ -58,19 +56,7 @@ case class Observation(
       }
     }
 
-    goalZones.foreach { coord =>
-      globalMap.update(coord, "goal")
-    }
-    roleZones.foreach { coord =>
-//      println(agentId + " set " + coord + " as role zone")
-      globalMap.update(coord, "role")
-    }
 
-    for (roleZone <- allRoleZones) {
-      if (globalMap(roleZone) != "role") {
-//        println(agentId + " " + currentPos + " role zone at " + roleZone + " is set as " + globalMap(roleZone))
-      }
-    }
 
 
     println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size)
@@ -81,11 +67,13 @@ case class Observation(
   }
 
   def getKnownRoleZones: Set[Coordinate] = {
-    globalMap.filter(_._2 == "role").keys.toSet
+//    globalMap.filter(_._2 == "role").keys.toSet
+    knownRoleZones
   }
 
   def getKnownGoalZones: Set[Coordinate] = {
-    globalMap.filter(_._2 == "goal").keys.toSet
+//    globalMap.filter(_._2 == "goal").keys.toSet
+    knownGoalZones
   }
 
   def isUnknown(coord: Coordinate): Boolean = {

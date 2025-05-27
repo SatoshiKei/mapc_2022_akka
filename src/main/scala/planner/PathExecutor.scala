@@ -50,10 +50,22 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
       case Left(obstacleCoord) =>
         println(s"[INFO] Path blocked, fallback to ClearIntention at $obstacleCoord")
-        // fallback ClearIntention can be created here
-        new ClearUnitIntention(obstacleCoord).planNextAction(observation)
+        if (observation.globalMap.get(obstacleCoord).contains("entity")) {
+          println(s"${observation.agentId} is blocked by another agent — attempting to dodge.")
+          findDodgeDirection(observation).map(MoveAction(_)).getOrElse(SkipAction())
+        } else {
+          new ClearUnitIntention(obstacleCoord).planNextAction(observation)
+        }
     }
   }
+
+  def findDodgeDirection(obs: Observation): Option[String] = {
+    List("n", "e", "s", "w").find { dir =>
+      val coord = obs.currentPos.fromDirection(dir)
+      obs.globalMap.get(coord).forall(v => v == "empty" || v == "unknown")
+    }
+  }
+
 
 
   private def findPath(
@@ -78,6 +90,8 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       for (n <- current.neighbors(1, includeDiagonals = false)) {
         val blocked = map.get(n).exists(v => Set("obstacle", "block", "entity").contains(v))
         val tentative = gScore(current) + 1
+
+        val value = map.get(n)
 
         if (tentative < gScore.getOrElse(n, Int.MaxValue)) {
           cameFrom(n) = current
