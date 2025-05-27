@@ -16,7 +16,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       val directions = List("n", "e", "s", "w")
       val moveOption = directions.find { dir =>
         val targetCoord = observation.currentPos.fromDirection(dir)
-        observation.globalMap.get(targetCoord).forall(v => !Set("block", "obstacle", "agent").contains(v))
+        observation.globalMap.get(targetCoord).forall(v => !Set("block", "obstacle", "entity").contains(v))
       }
 
 
@@ -35,10 +35,12 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
         val direction = observation.currentPos.toDirection(nextCoord)
         direction match {
           case Some(desiredDir) =>
-            println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir")
             if (desiredDir != observation.orientation) {
               val rotation = computeRotation(observation.orientation, desiredDir)
+              println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord + " rotation: " + rotation)
               return rotation.map(RotateAction(_)).getOrElse(SkipAction())
+            } else {
+              println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord)
             }
             clearPlanner.shouldClear(observation, desiredDir).getOrElse(MoveAction(desiredDir))
 
@@ -74,7 +76,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       if (current == goal) return Right(reconstructFirstStep(cameFrom, current, start).get)
 
       for (n <- current.neighbors(1, includeDiagonals = false)) {
-        val blocked = map.get(n).exists(v => Set("obstacle", "block").contains(v))
+        val blocked = map.get(n).exists(v => Set("obstacle", "block", "entity").contains(v))
         val tentative = gScore(current) + 1
 
         if (tentative < gScore.getOrElse(n, Int.MaxValue)) {
@@ -104,8 +106,8 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
   private def computeRotation(current: String, target: String): Option[String] = {
     val dirs = List("n", "e", "s", "w")
-    val currentIdx = dirs.indexOf(current)
-    val targetIdx = dirs.indexOf(target)
+    val currentIdx = dirs.indexOf(current) //2
+    val targetIdx = dirs.indexOf(target) //1
 
     if (currentIdx == -1 || targetIdx == -1) return None
 

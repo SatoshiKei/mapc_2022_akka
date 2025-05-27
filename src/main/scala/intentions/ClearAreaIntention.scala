@@ -7,6 +7,10 @@ import model.{AgentAction, Coordinate, Observation}
  */
 class ClearAreaIntention(val center: Coordinate, val radius: Int = 5) extends Intention {
 
+  override def explain(): String = {
+    "clear all clearable cells in an area"
+  }
+
   private var currentUnitIntention: Option[ClearUnitIntention] = None
   private val skipIntention = new SkipIntention()
 

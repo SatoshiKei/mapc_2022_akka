@@ -94,7 +94,7 @@ package actors {
 
 
                 println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
-                println("Sending action: " + action.noSpaces)
+                println(agentName + " is sending action: " + action.noSpaces)
 
               case "sim-end" =>
                 println("🏁 Simulation ended.")

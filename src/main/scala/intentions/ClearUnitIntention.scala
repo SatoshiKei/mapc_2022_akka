@@ -10,6 +10,10 @@ import scala.collection.mutable
  */
 class ClearUnitIntention(val target: Coordinate) extends Intention {
 
+  override def explain(): String = {
+    "clear a single coordinate"
+  }
+
   private var travelIntention: Option[TravelIntention] = None
   private var skipIntention: SkipIntention = new SkipIntention()
   private var finished: Boolean = false

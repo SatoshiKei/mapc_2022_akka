@@ -12,6 +12,10 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
   private var roleIntention: Option[AdoptRoleIntention] = None
   private var finished: Boolean = false
 
+  override def explain(): String = {
+    "attaching first block"
+  }
+
   override def planNextAction(observation: Observation): AgentAction = {
     if (finished) return SkipAction()
 

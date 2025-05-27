@@ -10,6 +10,13 @@ class ExploreIntention() extends Intention with ScoredIntention {
   private var relocating: Boolean = false
   private var estimatedMapSize = 100
 
+  override def explain(): String = {
+    if (currentTravelIntention.isEmpty)
+      "deciding exploration coordinate"
+    else
+      "exploring " + currentTravelIntention.get.target + " coordinate"
+  }
+
   override def score(obs: Observation): Double =
     if (obs.mapIsFullyExplored) 0.0
     else 1.0 - (obs.globalMap.size / estimatedMapSize)

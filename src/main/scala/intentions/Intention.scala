@@ -15,4 +15,5 @@ trait Intention {
 
   def shouldAbort(observation: Observation): Boolean = false
 
+  def explain(): String
 }

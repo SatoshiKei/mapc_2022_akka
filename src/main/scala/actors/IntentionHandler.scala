@@ -44,11 +44,10 @@ class IntentionHandler() {
 
 
   def planNextAction(observation: Observation): AgentAction = {
-    val old = currentIntention
+    val previous = currentIntention
     evaluateAndMaybeSwitch(observation)
-    val oldName = old.map(_.getClass.getSimpleName).getOrElse("None")
-    val currentName = currentIntention.map(_.getClass.getSimpleName).getOrElse("None")
-    println(s"${observation.agentId} Previous: $oldName Current: $currentName")
+//    val oldName = old.map(_.getClass.getSimpleName).getOrElse("None")
+    println(s"${observation.agentId} Previous: ${previous.map(_.explain()).getOrElse("None")} Current: ${currentIntention.map(_.explain()).getOrElse("None")}")
     currentIntention.map(_.planNextAction(observation)).getOrElse(SkipAction())
   }
 

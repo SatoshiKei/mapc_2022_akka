@@ -23,6 +23,10 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
 //    }
 //  }
 
+  override def explain(): String = {
+    "completing " + task.name
+  }
+
   override def score(observation: Observation): Double = {
     val step = observation.simulation.getSimulationStep
 

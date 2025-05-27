@@ -6,6 +6,14 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
 
   private var travel: Option[TravelIntention] = None
 
+  override def explain(): String = {
+    if (travel.isEmpty) {
+      "adopting role " + roleName
+    } else {
+      "traveling to coordiante " + travel.get.target + " to adopt role " + roleName
+    }
+  }
+
   override def score(obs: Observation): Double = {
     if (obs.currentRole.contains(roleName)) 0.0
     else 0.7
@@ -18,9 +26,11 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
       return AgentAction("skip")
     }
 
+    //TODO - THIS SHOULD ME REMOVED - DONE ALREADY ON INTENTION HANDLER
     if (observation.getKnownRoleZones.isEmpty) {
       return new ExploreIntention().planNextAction(observation)
     }
+    //-------------------------
 
     if (travel.isDefined && travel.get.target != observation.currentPos) {
       return travel.get.planNextAction(observation)

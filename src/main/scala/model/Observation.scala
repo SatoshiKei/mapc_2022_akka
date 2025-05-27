@@ -62,13 +62,13 @@ case class Observation(
       globalMap.update(coord, "goal")
     }
     roleZones.foreach { coord =>
-      println(agentId + " set " + coord + " as role zone")
+//      println(agentId + " set " + coord + " as role zone")
       globalMap.update(coord, "role")
     }
 
     for (roleZone <- allRoleZones) {
       if (globalMap(roleZone) != "role") {
-        println(agentId + " " + currentPos + " role zone at " + roleZone + " is set as " + globalMap(roleZone))
+//        println(agentId + " " + currentPos + " role zone at " + roleZone + " is set as " + globalMap(roleZone))
       }
     }
 
