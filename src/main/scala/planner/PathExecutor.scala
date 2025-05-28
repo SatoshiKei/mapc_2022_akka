@@ -16,7 +16,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       val directions = List("n", "e", "s", "w")
       val moveOption = directions.find { dir =>
         val targetCoord = observation.currentPos.fromDirection(dir)
-        observation.globalMap.get(targetCoord).forall(v => !Set("block", "obstacle", "entity").contains(v))
+        observation.globalMap.get(targetCoord).forall(v => !Set("block", "obstacle", "entity", "dispenser").contains(v))
       }
 
 
@@ -29,7 +29,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
           return ClearAction(Coordinate(0, -1))
       }
     }
-
+    println(observation.agentId + " is finding a path from " + observation.currentPos + " to " + target)
     findPath(observation.globalMap, observation.currentPos, target, observation.visionRadius) match {
       case Right(nextCoord) =>
         val direction = observation.currentPos.toDirection(nextCoord)
@@ -39,10 +39,19 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
               val rotation = computeRotation(observation.orientation, desiredDir)
               println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord + " rotation: " + rotation)
               return rotation.map(RotateAction(_)).getOrElse(SkipAction())
-            } else {
-              println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord)
             }
-            clearPlanner.shouldClear(observation, desiredDir).getOrElse(MoveAction(desiredDir))
+            println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord)
+//            clearPlanner.shouldClear(observation, desiredDir).getOrElse(MoveAction(desiredDir))
+            clearPlanner.shouldClear(observation, desiredDir) match {
+              case Some(clearAction) => clearAction
+              case None => {
+                if (observation.isPassable(nextCoord))
+                  MoveAction(desiredDir)
+                else {
+                  findDodgeDirection(observation).map(MoveAction(_)).getOrElse(SkipAction())
+                }
+              }
+            }
 
           case None =>
             println(s"[ERROR] Can't rotate toward $nextCoord"); SkipAction()
@@ -61,7 +70,8 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
   def findDodgeDirection(obs: Observation): Option[String] = {
     List("n", "e", "s", "w").find { dir =>
-      val coord = obs.currentPos.fromDirection(dir)
+      val coord = obs.currentPos.fromDirection(dir) + obs.currentPos
+      println(obs.agentId + " is trying to dodge an unclearable obstacle by going to " + coord)
       obs.globalMap.get(coord).forall(v => v == "empty" || v == "unknown")
     }
   }
@@ -88,7 +98,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       if (current == goal) return Right(reconstructFirstStep(cameFrom, current, start).get)
 
       for (n <- current.neighbors(1, includeDiagonals = false)) {
-        val blocked = map.get(n).exists(v => Set("obstacle", "block", "entity").contains(v))
+        val blocked = map.get(n).exists(v => Set("obstacle", "block", "entity", "dispenser").contains(v))
         val tentative = gScore(current) + 1
 
         val value = map.get(n)
@@ -139,7 +149,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     math.abs(a.x - b.x) + math.abs(a.y - b.y)
 
   private def isPassable(map: mutable.Map[Coordinate, String], coord: Coordinate): Boolean =
-    map.get(coord).forall(v => !Set("obstacle", "block").contains(v))
+    map.get(coord).forall(v => !Set("obstacle", "block", "entity", "dispenser").contains(v))
 
 
 }

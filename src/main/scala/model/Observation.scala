@@ -59,7 +59,7 @@ case class Observation(
 
 
 
-    println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size)
+    println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep)
   }
 
   def visionRadius: Int = {
@@ -177,7 +177,7 @@ case class Observation(
   def isPassable(coord: Coordinate): Boolean = {
     globalMap.get(coord) match {
       case Some(value) =>
-        val impassables = Set("block", "obstacle") // Exclude "entity"
+        val impassables = Set("block", "obstacle", "entity", "dispenser")
         !impassables.contains(value.toLowerCase)
       case None =>
         true // Unknown tiles are considered passable

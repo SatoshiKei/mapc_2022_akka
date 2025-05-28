@@ -191,6 +191,13 @@ class Simulation(val teamName: String) {
     allowedRoles.sortBy(role => -roleScore(role)).map(_.name)
   }
 
+  def getRolesWithAction(action: String): Set[String] = {
+    allRoles.filter(_.canPerformAction(action)).map(_.name).toSet
+  }
+
+
+
+
 
 
 }

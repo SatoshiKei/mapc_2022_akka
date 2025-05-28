@@ -162,6 +162,7 @@ package actors {
 
       // Tasks (optional)
       val tasks = percept.get[Vector[Task]]("tasks").getOrElse(Vector())
+      println("Tasks: " + tasks)
 
       // Current Role (optional)
       val currentRole = percept.get[String]("role").toOption

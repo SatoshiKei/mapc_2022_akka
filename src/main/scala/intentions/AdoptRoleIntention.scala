@@ -20,7 +20,7 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
   }
 
   override def planNextAction(observation: Observation): AgentAction = {
-    // Step 1: Already adopted?
+    // TODO - This never happens
     if (observation.currentRole.contains(roleName)) {
       println(observation.agentId + " already has role " + roleName)
       return AgentAction("skip")
@@ -33,6 +33,7 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
     //-------------------------
 
     if (travel.isDefined && travel.get.target != observation.currentPos) {
+      println(observation.agentId + " in AdoptRoleIntention is moving from" + observation.currentPos + " to " + travel.get.target)
       return travel.get.planNextAction(observation)
     }
 
@@ -53,15 +54,16 @@ class AdoptRoleIntention(roleName: String) extends ScoredIntention {
 
         closest match {
           case Some(target) =>
+            // TODO - travel.isEmpty || travel.get.target != target
             if (travel.isEmpty || travel.get.target != target) {
               travel = Some(new TravelIntention(target))
             }
-            return travel.get.planNextAction(observation)
+            travel.get.planNextAction(observation)
 
           case None =>
             // No known role zone → skip (or fallback to Explore)
             println(observation.agentId + " is not in a role zone")
-            return AgentAction("skip")
+            AgentAction("skip")
         }
     }
   }

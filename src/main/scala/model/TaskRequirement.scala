@@ -1,8 +1,11 @@
 package model
 
 case class TaskRequirement(
-                 coordinate: Coordinate,
-                 detail: String,
-                 blockType: String,
+                 x: Int,
+                 y: Int,
+                 details: String,
+                 `type`: String,
                ) {
+
+  def coordinate: Coordinate = Coordinate(x, y)
 }
