@@ -34,6 +34,8 @@ package actors {
     var orientation: String = "n"
     var currentRole: String = "std"
     var allRoles: Vector[Role] = Vector()
+    var team: String = ""
+    var teamSize: Int = 0
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -68,7 +70,9 @@ package actors {
 //                println("Percept: " + json)
                 val allRoles = percept.get[Vector[Role]]("roles").getOrElse(Vector())
                 this.allRoles = allRoles
-                println("🚀 Simulation started.")
+                team = json.hcursor.downField("content").downField("percept").get[String]("team").getOrElse("")
+                teamSize = json.hcursor.downField("content").downField("percept").get[Int]("teamSize").getOrElse(0)
+                println("🚀 Simulation started. Team " + team + ":" + teamSize)
 //                println("Roles: " + roles + allRoles)
               case "request-action" =>
 
@@ -143,35 +147,35 @@ package actors {
       // Agent info
       val agentId = agentName
 
-      // Default position (could be updated later if available)
+
       val currentPos = globalPosition
 //      println(agentName + " position: " + currentPos)
 
-      // Energy
+
       val energy = percept.get[Int]("energy").getOrElse(0)
 
-      // Things
-      val things = parseThings(percept)
-      println(agentName + "'s things: " + things)
 
-      // Attachment
+      val things = parseThings(percept)
+//      println(agentName + "'s things: " + things)
+
+
       val attached = percept.get[Vector[(Int, Int)]]("attached").getOrElse(Vector()).map { case (x, y) => Coordinate(x, y) }
 
-      // Simulation step
+
       val step = content.get[Int]("step").getOrElse(0)
 
-      // Tasks (optional)
+
       val tasks = percept.get[Vector[Task]]("tasks").getOrElse(Vector())
       println("Tasks: " + tasks)
 
-      // Current Role (optional)
+
       val currentRole = percept.get[String]("role").toOption
       this.currentRole = currentRole.get
 
-      // Norms (optional)
+
       val norms = percept.get[Vector[Norm]]("norms").getOrElse(Vector())
 
-      // Reserved roles (optional)
+
       val reservedRoles: Map[String, Role] =
         percept.get[Vector[Json]]("reservedRoles").getOrElse(Vector()).flatMap { roleJson =>
           for {
@@ -180,7 +184,7 @@ package actors {
           } yield agent -> role
         }.toMap
 
-      // Goal Zones
+
       val goalZones: Set[Coordinate] =
         percept.get[Vector[(Int, Int)]]("goalZones")
           .getOrElse(Vector())
@@ -189,7 +193,7 @@ package actors {
           }
           .toSet
 
-      // Role Zones
+
       val roleZones: Set[Coordinate] =
         percept.get[Vector[(Int, Int)]]("roleZones")
           .getOrElse(Vector())
@@ -197,7 +201,7 @@ package actors {
             globalPosition + Coordinate(x, y)
           }
           .toSet
-      println("Current: " + globalPosition + "Percept: " + percept.get[Vector[(Int, Int)]]("roleZones") + " roleZones: " + roleZones)
+//      println("Current: " + globalPosition + "Percept: " + percept.get[Vector[(Int, Int)]]("roleZones") + " roleZones: " + roleZones)
 
 
       goalZones.foreach { coord =>
@@ -218,7 +222,8 @@ package actors {
         sim.getReservedRoles() + (agent -> role) // merge
       }
       sim.setReservedRoles(reservedRoles)
-
+      sim.setTeam(team)
+      sim.setTeamSize(teamSize)
 
       Observation(
         agentId = agentId,
@@ -243,6 +248,7 @@ package actors {
 
       val observation = createObservation(json)
       observation.updateKnownMap()
+      observation.printKnownDispenserSummary()
 
       val action = intentionHandler.planNextAction(observation)
       val actionType = action.actionType
@@ -295,7 +301,6 @@ package actors {
 
 
 
-    // Maps (x, y) offsets to direction
     def directionFromCoordinates(x: Int, y: Int): Option[String] = (x, y) match {
       case (0, -1) => Some("n")
       case (0, 1)  => Some("s")

@@ -9,11 +9,11 @@ class DefaultClearPlanner(minEnergy: Int = 10) extends ClearPlanner {
     val rel = observation.currentPos.fromDirection(direction)
 
     val clearable = observation.things.find(t => {
-      val abs = observation.currentPos + Coordinate(t.x, t.y) //Deprecated rotate to facing
+      val abs = observation.currentPos + Coordinate(t.x, t.y)
       t.x == rel.x && t.y == rel.y &&
         (t.`type` == "obstacle" || t.`type` == "block") &&
         t.details.isEmpty &&
-        !observation.globalMap.get(abs).contains("entity") // Avoid clearing agents
+        !observation.globalMap.get(abs).contains("entity")
     })
 
 

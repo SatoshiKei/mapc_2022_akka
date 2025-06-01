@@ -5,9 +5,7 @@ import model.{AgentAction, Coordinate, Observation}
 
 import scala.collection.mutable
 
-/**
- * Clears a single coordinate (unit obstacle or block).
- */
+
 class ClearUnitIntention(val target: Coordinate) extends Intention {
 
   override def explain(): String = {

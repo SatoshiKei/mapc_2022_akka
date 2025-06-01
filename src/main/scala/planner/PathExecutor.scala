@@ -12,11 +12,11 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
   override def nextAction(observation: Observation, target: Coordinate): AgentAction = {
 
     // STEP 1: If attached to another agent, move out first
-    if (observation.currentPos.x == 0 && observation.currentPos.y == 0) {
+    if (observation.simulation.getSimulationStep == 1) {
       val directions = List("n", "e", "s", "w")
       val moveOption = directions.find { dir =>
         val targetCoord = observation.currentPos.fromDirection(dir)
-        observation.globalMap.get(targetCoord).forall(v => !Set("block", "obstacle", "entity", "dispenser").contains(v))
+        observation.getTileType(targetCoord).forall(v => !Set("block", "obstacle", "entity", "dispenser").contains(v))
       }
 
 
@@ -97,13 +97,14 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
       if (current == goal) return Right(reconstructFirstStep(cameFrom, current, start).get)
 
-      for (n <- current.neighbors(1, includeDiagonals = false)) {
-        val blocked = map.get(n).exists(v => Set("obstacle", "block", "entity", "dispenser").contains(v))
+      for (n <- current.neighbors(1, includeDiagonals = false) if isPassable(map, n)) {
+
+        val blocked = map.get(n).exists(v => Set("obstacle", "block").contains(v))
         val tentative = gScore(current) + 1
 
         val value = map.get(n)
 
-        if (tentative < gScore.getOrElse(n, Int.MaxValue)) {
+        if (tentative < gScore.getOrElse(n, 60)) {
           cameFrom(n) = current
           gScore(n) = tentative
           fScore(n) = tentative + heuristic(n, goal)
@@ -149,7 +150,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     math.abs(a.x - b.x) + math.abs(a.y - b.y)
 
   private def isPassable(map: mutable.Map[Coordinate, String], coord: Coordinate): Boolean =
-    map.get(coord).forall(v => !Set("obstacle", "block", "entity", "dispenser").contains(v))
+    map.get(coord).map(_.split(":")(0)).forall(v => !Set("entity", "dispenser").contains(v))
 
 
 }

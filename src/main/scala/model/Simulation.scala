@@ -17,6 +17,8 @@ class Simulation(val teamName: String) {
   private var simulationStep: Int = 0
   private var mapCount: Option[Int] = None
   private var reservedRoles: Map[String, Role] = Map()
+  private var team: String = ""
+  private var teamSize: Int = 0
 
   def setReservedRoles(roles: Map[String, Role]): Unit = {
     reservedRoles = roles
@@ -46,6 +48,18 @@ class Simulation(val teamName: String) {
   }
 
   def getSimulationStep: Int = simulationStep
+
+  def setTeam(team: String) = {
+    this.team = team
+  }
+
+  def getTeam: String = team
+
+  def setTeamSize(teamSize: Int) = {
+    this.teamSize = teamSize
+  }
+
+  def getTeamSize: Int = teamSize
 
 //  def isLastStep: Boolean = staticPercept.exists(_.steps == simulationStep + 1)
 

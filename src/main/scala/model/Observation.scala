@@ -35,13 +35,16 @@ case class Observation(
   def updateKnownMap(): Unit = {
     for (thing <- things) {
       val relative = Coordinate(thing.x, thing.y)
-      val rotated = relative
-      val absolute = currentPos + rotated
-      globalMap.update(absolute, thing.`type`) // Always update; latest observation is most accurate
+      val absolute = currentPos + relative
+      val encodedValue = thing.`type` match {
+        case "block" | "dispenser" | "entity" => s"${thing.`type`}:${thing.details}"
+        case other => other
+      }
+      globalMap.update(absolute, encodedValue)
     }
 
-    // Also record the agent's own current position as "entity" TODO - Is this necessary?
-    globalMap.update(currentPos, "entity")
+    // Also record the agent's own current position as "entity:team"
+    globalMap.update(currentPos, "entity:"+simulation.teamName)
 
     // Mark empty tiles within vision that are not occupied by anything
     for {
@@ -55,10 +58,6 @@ case class Observation(
         globalMap.update(abs, "empty")
       }
     }
-
-
-
-
     println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep)
   }
 
@@ -103,12 +102,10 @@ case class Observation(
 
     var rangeIncrement = 0
     var iterCount = 0
-    var maxIterations = 60
+    var maxIterations = 50
 
-    // Initial vision ring
     var unknownCoordinates = currentCoordinate.neighbors(vision).filter(coord => !globalMap.contains(coord))
 
-    // Spiral out until we find unknowns or exceed max iterations
     while (unknownCoordinates.isEmpty && iterCount <= maxIterations) {
       iterCount += 1
       rangeIncrement += 3
@@ -119,10 +116,8 @@ case class Observation(
     if (iterCount > maxIterations || unknownCoordinates.isEmpty)
       return None
 
-    // Shuffle unknowns to randomize agent directions
     val shuffled = scala.util.Random.shuffle(unknownCoordinates)
 
-    // Find the coordinate(s) closest to the starting position
     val minDist = shuffled.map(startCoordinate.distanceTo).min
     val candidates = shuffled.filter(c => math.abs(startCoordinate.distanceTo(c) - minDist) < 0.1)
 
@@ -142,12 +137,38 @@ case class Observation(
 
 
   def findClosestDispenser(blockType: String): Option[Coordinate] = {
-    things.collect {
-      case t if t.`type` == "dispenser" && t.details == blockType =>
-        val relative = Coordinate(t.x, t.y)
-        currentPos + relative
-    }.sortBy(_.manhattanDistance(currentPos)).headOption
+    globalMap.collect {
+      case (coord, value) if value == "dispenser" && getTileDetail(coord).contains(blockType) =>
+        coord
+    }.toSeq.sortBy(_.manhattanDistance(currentPos)).headOption
   }
+
+  def getTileType(coord: Coordinate): Option[String] =
+    globalMap.get(coord).map(_.split(":")(0))
+
+  def getTileDetail(coord: Coordinate): Option[String] =
+    globalMap.get(coord).flatMap {
+      case s if s.contains(":") => Some(s.split(":")(1))
+      case _ => None
+    }
+
+  def isBlockOfType(coord: Coordinate, blockType: String): Boolean =
+    globalMap.get(coord).contains(s"block:$blockType")
+
+
+  def printKnownDispenserSummary(): Unit = {
+    val blockTypes = globalMap.collect {
+      case (_, value) if value.startsWith("dispenser:") =>
+        value.split(":")(1)
+    }
+
+    val b0 = blockTypes.count(_ == "b0")
+    val b1 = blockTypes.count(_ == "b1")
+    val b2 = blockTypes.count(_ == "b2")
+
+    println(s"$agentId known dispensers — b0: $b0, b1: $b1, b2: $b2")
+  }
+
 
 
   //TO DO
@@ -175,7 +196,7 @@ case class Observation(
 
 
   def isPassable(coord: Coordinate): Boolean = {
-    globalMap.get(coord) match {
+    getTileType(coord) match {
       case Some(value) =>
         val impassables = Set("block", "obstacle", "entity", "dispenser")
         !impassables.contains(value.toLowerCase)

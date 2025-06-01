@@ -2,9 +2,6 @@ package intentions
 
 import model.{AgentAction, Coordinate, Observation}
 
-/**
- * Clears all clearable cells in an area.
- */
 class ClearAreaIntention(val center: Coordinate, val radius: Int = 5) extends Intention {
 
   override def explain(): String = {
