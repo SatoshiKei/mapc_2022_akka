@@ -13,7 +13,7 @@ class DefaultClearPlanner(minEnergy: Int = 10) extends ClearPlanner {
       t.x == rel.x && t.y == rel.y &&
         (t.`type` == "obstacle" || t.`type` == "block") &&
         t.details.isEmpty &&
-        !observation.globalMap.get(abs).contains("entity")
+        !observation.globalMap.get(abs).exists(thing => thing.`type` == "entity")
     })
 
 

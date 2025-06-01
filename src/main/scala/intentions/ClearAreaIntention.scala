@@ -38,7 +38,7 @@ class ClearAreaIntention(val center: Coordinate, val radius: Int = 5) extends In
     center.neighbors(range = radius).filter { coord =>
       val mapValue = observation.globalMap.get(coord)
       val attachedCoords = observation.attached.map(c => observation.currentPos + c)
-      mapValue.exists(v => v == "block" || v == "obstacle" || v == "unknown") && !attachedCoords.contains(coord)
+      mapValue.exists(v => v.`type` == "block" || v.`type` == "obstacle" || v.`type` == "unknown") && !attachedCoords.contains(coord)
     }
   }
 

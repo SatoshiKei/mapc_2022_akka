@@ -10,7 +10,7 @@ case class Observation(
                         attached: Vector[Coordinate],
                         currentRole: Option[String],
                         simulation: Simulation,
-                        globalMap: mutable.Map[Coordinate, String],
+                        globalMap: mutable.Map[Coordinate, Thing],
                         goalZones: Set[Coordinate],
                         roleZones: Set[Coordinate],
                         knownGoalZones: Set[Coordinate],
@@ -40,11 +40,11 @@ case class Observation(
         case "block" | "dispenser" | "entity" => s"${thing.`type`}:${thing.details}"
         case other => other
       }
-      globalMap.update(absolute, encodedValue)
+      globalMap.update(absolute, thing)
     }
 
     // Also record the agent's own current position as "entity:team"
-    globalMap.update(currentPos, "entity:"+simulation.teamName)
+//    globalMap.update(currentPos, "entity:"+simulation.teamName)
 
     // Mark empty tiles within vision that are not occupied by anything
     for {
@@ -55,10 +55,10 @@ case class Observation(
       val rel = Coordinate(dx, dy)
       val abs = currentPos + rel
       if (!things.exists(t => t.x == dx && t.y == dy) && math.abs(dx) + math.abs(dy) <= visionRadius) {
-        globalMap.update(abs, "empty")
+        globalMap.update(abs, Thing(dx, dy, "empty", ""))
       }
     }
-    println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep)
+    println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep + " Dispensers: " + knownDispenserSummary())
   }
 
   def visionRadius: Int = {
@@ -138,35 +138,35 @@ case class Observation(
 
   def findClosestDispenser(blockType: String): Option[Coordinate] = {
     globalMap.collect {
-      case (coord, value) if value == "dispenser" && getTileDetail(coord).contains(blockType) =>
+      case (coord, value) if value.`type` == "dispenser" && getTileDetail(coord).contains(blockType) =>
         coord
     }.toSeq.sortBy(_.manhattanDistance(currentPos)).headOption
   }
 
   def getTileType(coord: Coordinate): Option[String] =
-    globalMap.get(coord).map(_.split(":")(0))
+    globalMap.get(coord).map(_.`type`)
 
   def getTileDetail(coord: Coordinate): Option[String] =
-    globalMap.get(coord).flatMap {
-      case s if s.contains(":") => Some(s.split(":")(1))
-      case _ => None
+    globalMap.get(coord).map(_.details)
+
+  def isBlockOfType(coord: Coordinate, blockType: String): Boolean = {
+    globalMap.get(coord).exists { thing =>
+      thing.`type` == "block" && thing.details == blockType
     }
-
-  def isBlockOfType(coord: Coordinate, blockType: String): Boolean =
-    globalMap.get(coord).contains(s"block:$blockType")
+  }
 
 
-  def printKnownDispenserSummary(): Unit = {
+  def knownDispenserSummary(): String = {
     val blockTypes = globalMap.collect {
-      case (_, value) if value.startsWith("dispenser:") =>
-        value.split(":")(1)
+      case (_, value) if value.`type` == "dispenser" =>
+        value.details
     }
 
     val b0 = blockTypes.count(_ == "b0")
     val b1 = blockTypes.count(_ == "b1")
     val b2 = blockTypes.count(_ == "b2")
 
-    println(s"$agentId known dispensers — b0: $b0, b1: $b1, b2: $b2")
+    s"$agentId known dispensers — b0: $b0, b1: $b1, b2: $b2"
   }
 
 

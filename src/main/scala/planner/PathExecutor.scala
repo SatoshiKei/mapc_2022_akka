@@ -2,7 +2,7 @@ package planner
 
 import action.{ClearAction, MoveAction, RotateAction, SkipAction}
 import intentions.ClearUnitIntention
-import model.{AgentAction, Coordinate, Observation}
+import model.{AgentAction, Coordinate, Observation, Thing}
 
 import scala.collection.mutable
 
@@ -59,7 +59,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
       case Left(obstacleCoord) =>
         println(s"[INFO] Path blocked, fallback to ClearIntention at $obstacleCoord")
-        if (observation.globalMap.get(obstacleCoord).contains("entity")) {
+        if (observation.globalMap.get(obstacleCoord).exists(thing => thing.`type` == "entity")) {
           println(s"${observation.agentId} is blocked by another agent — attempting to dodge.")
           findDodgeDirection(observation).map(MoveAction(_)).getOrElse(SkipAction())
         } else {
@@ -72,14 +72,14 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     List("n", "e", "s", "w").find { dir =>
       val coord = obs.currentPos.fromDirection(dir) + obs.currentPos
       println(obs.agentId + " is trying to dodge an unclearable obstacle by going to " + coord)
-      obs.globalMap.get(coord).forall(v => v == "empty" || v == "unknown")
+      obs.globalMap.get(coord).forall(v => v.`type` == "empty" || v.`type` == "unknown")
     }
   }
 
 
 
   private def findPath(
-                        map: mutable.Map[Coordinate, String],
+                        map: mutable.Map[Coordinate, Thing],
                         start: Coordinate,
                         goal: Coordinate,
                         vision: Int
@@ -99,7 +99,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
       for (n <- current.neighbors(1, includeDiagonals = false) if isPassable(map, n)) {
 
-        val blocked = map.get(n).exists(v => Set("obstacle", "block").contains(v))
+        val blocked = map.get(n).exists(v => Set("obstacle", "block").contains(v.`type`))
         val tentative = gScore(current) + 1
 
         val value = map.get(n)
@@ -115,7 +115,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
         }
       }
     }
-
+    println("Start: " + start + " Goal: " + goal + "Came from: " + cameFrom.get(start) + " gScore: " + gScore.get(start) + " fScore: " + fScore.get(start))
     firstObstacle.toLeft(null)
   }
 
@@ -149,8 +149,8 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
   private def heuristic(a: Coordinate, b: Coordinate): Int =
     math.abs(a.x - b.x) + math.abs(a.y - b.y)
 
-  private def isPassable(map: mutable.Map[Coordinate, String], coord: Coordinate): Boolean =
-    map.get(coord).map(_.split(":")(0)).forall(v => !Set("entity", "dispenser").contains(v))
+  private def isPassable(map: mutable.Map[Coordinate, Thing], coord: Coordinate): Boolean =
+    map.get(coord).map(_.`type`).forall(v => !Set("entity", "dispenser").contains(v))
 
 
 }

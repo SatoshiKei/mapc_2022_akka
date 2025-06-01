@@ -19,7 +19,10 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
   }
 
   override def planNextAction(observation: Observation): AgentAction = {
-    if (finished) return SkipAction()
+    if (finished) {
+      println(observation.agentId + " is trying to complete a task that has already been completed, causing it to hault")
+      return SkipAction()
+    }
 
     // Step 1: Determine target block coordinate
     if (targetCoord.isEmpty) {
@@ -70,29 +73,6 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
           return exploreIntention.get.planNextAction(observation)
       }
 
-
-//      (abandoned, dispenser) match {
-//        case (Some(a), Some(d)) =>
-//          val from = observation.currentPos
-//          targetCoord = Some(if (from.manhattanDistance(a) <= from.manhattanDistance(d)) a else d)
-//        case (Some(a), None) => {
-//          println(observation.agentId + "is going after block of type " + blockType + " abandoned at " + a)
-//          targetCoord = Some(a)
-//        }
-//        case (None, Some(d)) => {
-//          println(observation.agentId + "is going after block of type " + blockType + " from dispenser at " + d)
-//          targetCoord = Some(d)
-//        }
-//        case _ => {
-//          println(observation.agentId + "could not find any blocks of type " + blockType)
-//          if (exploreIntention.isEmpty) {
-//            exploreIntention = Some(new ExploreIntention())
-//          }
-//          return exploreIntention.get.planNextAction(observation)
-//        }
-//      }
-
-
     }
 
     val target = targetCoord.get
@@ -107,9 +87,10 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
 
     // Step 3: Move adjacent
     if (!isAdjacent) {
-      println(observation.agentId + " is going to coordinate " + target + " adjacent to block/dispenser at" + targetCoord.get + "and can attach: " + hasAttachRole(observation) + " and can request: " + hasRequestRole(observation))
-      if (travelIntention.isEmpty || travelIntention.get.target != target) {
-        travelIntention = Some(new TravelIntention(target))
+      val adjacentCoordinate = target.neighbors(1, false).headOption
+      println(observation.agentId + " is going to coordinate " + adjacentCoordinate.get + " adjacent to block/dispenser at" + target + "and can attach: " + hasAttachRole(observation) + " and can request: " + hasRequestRole(observation))
+      if (travelIntention.isEmpty || travelIntention.get.target != adjacentCoordinate.get) {
+        travelIntention = Some(new TravelIntention(adjacentCoordinate.get))
       }
       return travelIntention.get.planNextAction(observation)
     }
@@ -121,17 +102,19 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
 
     value match {
       case "dispenser" =>
+        //TODO - This logic can't use finished, I have to check attached
         finished = true
         RequestAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "block" =>
-        if (!observation.globalMap.get(target).contains(blockType)) {
-          return ClearAction(observation.currentPos.toRelative(target))
-        }
+//        if (!observation.globalMap.get(target).exists(thing => thing.`type` == "entity")) {
+//          return ClearAction(observation.currentPos.toRelative(target))
+//        }
         finished = true
         AttachAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "empty" =>
+        println("Target: " + target )
         SkipAction()
 
       case _ =>
@@ -157,7 +140,7 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
         val abs = observation.currentPos + Coordinate(t.x, t.y)
         val neighbors = abs.neighbors(includeDiagonals = false)
         val isIsolated = !neighbors.exists(n =>
-          observation.globalMap.get(n).exists(v => Set("agent", "marker").contains(v.toLowerCase))
+          observation.globalMap.get(n).exists(v => Set("agent", "marker").contains(v.`type`.toLowerCase))
         )
         if (isIsolated) Some(abs) else None
     }.flatten.headOption

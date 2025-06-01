@@ -20,7 +20,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     if (obs.getKnownGoalZones.isEmpty) return 0.0
 
     val progress = task.requirements.count { r =>
-      obs.attached.exists(c => obs.globalMap.get(c).contains(r.`type`))
+      obs.attached.exists(c => obs.globalMap.get(c).exists(thing => thing.`type` == r.`type`))
     }
 
     val isNearGoal = obs.getKnownGoalZones.exists(_.distanceTo(obs.currentPos) <= 5)

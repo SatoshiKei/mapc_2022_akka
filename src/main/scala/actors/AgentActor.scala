@@ -9,7 +9,7 @@ package actors {
   import io.circe.parser._
   import io.circe.syntax._
   import io.circe.generic.auto._
-  import model.{AgentAction, Coordinate, Observation, Role}
+  import model.{AgentAction, Coordinate, Observation, Role, Thing}
   import shared.{CoordinateAlignment, KnownAgent, MapMerger, ShareMap, WhoIsHere}
 
   import scala.collection.mutable
@@ -30,7 +30,7 @@ package actors {
     var globalReservedRoles: Map[String, Role] = Map.empty
     var globalPosition: Coordinate = Coordinate(0, 0)
     val targetPosition: Coordinate = Coordinate(0, 0)
-    var globalMap: mutable.Map[Coordinate, String] = mutable.Map.empty
+    var globalMap: mutable.Map[Coordinate, Thing] = mutable.Map.empty
     var knownRoleZones: Set[Coordinate] = Set.empty
     var knownGoalZones: Set[Coordinate] = Set.empty
     var orientation: String = "n"
@@ -300,7 +300,7 @@ package actors {
 
       val observation = createObservation(json)
       observation.updateKnownMap()
-      observation.printKnownDispenserSummary()
+      //observation.printKnownDispenserSummary()
       this.observation = Some(observation)
 
       val action = intentionHandler.planNextAction(observation)
