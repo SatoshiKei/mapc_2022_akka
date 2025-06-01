@@ -10,6 +10,8 @@ package actors {
   import io.circe.syntax._
   import io.circe.generic.auto._
   import model.{AgentAction, Coordinate, Observation, Role}
+  import shared.{CoordinateAlignment, KnownAgent, MapMerger, ShareMap, WhoIsHere}
+
   import scala.collection.mutable
 
   object AgentActor {
@@ -36,6 +38,8 @@ package actors {
     var allRoles: Vector[Role] = Vector()
     var team: String = ""
     var teamSize: Int = 0
+    var currentStep: Int = 0
+    val knownAgents: mutable.Map[String, KnownAgent] = mutable.Map.empty
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -57,65 +61,15 @@ package actors {
 
     def receive: Receive = {
       case jsonString: String =>
-        parse(jsonString) match {
-          case Right(json) =>
-            val msgType = json.hcursor.get[String]("type").getOrElse("")
-
-            msgType match {
-              case "auth-response" =>
-                println("✅ Authenticated.")
-
-              case "sim-start" =>
-                val percept = json.hcursor.downField("content").downField("percept")
-//                println("Percept: " + json)
-                val allRoles = percept.get[Vector[Role]]("roles").getOrElse(Vector())
-                this.allRoles = allRoles
-                team = json.hcursor.downField("content").downField("percept").get[String]("team").getOrElse("")
-                teamSize = json.hcursor.downField("content").downField("percept").get[Int]("teamSize").getOrElse(0)
-                println("🚀 Simulation started. Team " + team + ":" + teamSize)
-//                println("Roles: " + roles + allRoles)
-              case "request-action" =>
-
-                val energy = json.hcursor.downField("content").downField("percept").get[Int]("energy").getOrElse(0)
-                val lastActionParams = json.hcursor.downField("content").downField("percept").get[Vector[String]]("lastActionParams").getOrElse(Vector()).mkString(",")
-                val lastAction = json.hcursor.downField("content").downField("percept").get[String]("lastAction").getOrElse("")
-                val lastActionResult = json.hcursor.downField("content").downField("percept").get[String]("lastActionResult").getOrElse("")
-
-                if (lastAction == "move" && lastActionResult == "success") {
-                  globalPosition = globalPosition + globalPosition.fromDirection(lastActionParams)
-                }
-
-                if (lastAction == "rotate" && lastActionResult == "success") {
-                  orientation = rotateDirection(orientation, lastActionParams)
-                }
-
-//                if (lastAction == "clear" && lastActionResult == "success") {
-//                  val lastActionCoordinate = globalPosition.fromDirection(lastActionParams)
-//                  val dx = lastActionCoordinate.x
-//                  val dy = lastActionCoordinate.y
-//                  val clearedCoord = globalPosition + Coordinate(dx, dy)
-//                  globalMap.update(clearedCoord, "cleared")
-//                }
+        handleMassimMessage(jsonString)
 
 
-                println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
-                val action = handleActionRequest(json)
-                println(agentName + " is sending action: " + action.noSpaces)
-                sendMessage(action)
-              case "sim-end" =>
-                println("🏁 Simulation ended.")
+      case who: WhoIsHere =>
+        handleWhoIsHere(who)
 
-              case "bye" =>
-                println("👋 Server closed.")
-                context.stop(self)
+      case mapShare: ShareMap =>
+        handleMapShare(mapShare)
 
-              case _ =>
-                println(s"⚠️ Unknown message: $json")
-            }
-
-          case Left(error) =>
-            println(s"❌ Failed to parse JSON: $error")
-        }
     }
 
     def sendMessage(json: Json): Unit = {
@@ -138,6 +92,104 @@ package actors {
 
     import io.circe._
     import model._
+
+    def handleMassimMessage(jsonString: String) = {
+      parse(jsonString) match {
+        case Right(json) =>
+          val msgType = json.hcursor.get[String]("type").getOrElse("")
+
+          msgType match {
+            case "auth-response" =>
+              println("✅ Authenticated.")
+
+            case "sim-start" =>
+              val percept = json.hcursor.downField("content").downField("percept")
+              //                println("Percept: " + json)
+              val allRoles = percept.get[Vector[Role]]("roles").getOrElse(Vector())
+              this.allRoles = allRoles
+              team = json.hcursor.downField("content").downField("percept").get[String]("team").getOrElse("")
+              teamSize = json.hcursor.downField("content").downField("percept").get[Int]("teamSize").getOrElse(0)
+              println("🚀 Simulation started. Team " + team + ":" + teamSize)
+            //                println("Roles: " + roles + allRoles)
+            case "request-action" =>
+
+              val energy = json.hcursor.downField("content").downField("percept").get[Int]("energy").getOrElse(0)
+              val lastActionParams = json.hcursor.downField("content").downField("percept").get[Vector[String]]("lastActionParams").getOrElse(Vector()).mkString(",")
+              val lastAction = json.hcursor.downField("content").downField("percept").get[String]("lastAction").getOrElse("")
+              val lastActionResult = json.hcursor.downField("content").downField("percept").get[String]("lastActionResult").getOrElse("")
+
+              if (lastAction == "move" && lastActionResult == "success") {
+                globalPosition = globalPosition + globalPosition.fromDirection(lastActionParams)
+              }
+
+              if (lastAction == "rotate" && lastActionResult == "success") {
+                orientation = rotateDirection(orientation, lastActionParams)
+              }
+
+              println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
+              val action = handleActionRequest(json)
+              println(agentName + " is sending action: " + action.noSpaces)
+              sendMessage(action)
+            case "sim-end" =>
+              println("🏁 Simulation ended.")
+
+            case "bye" =>
+              println("👋 Server closed.")
+              context.stop(self)
+
+            case _ =>
+              println(s"⚠️ Unknown message: $json")
+          }
+
+        case Left(error) =>
+          println(s"❌ Failed to parse JSON: $error")
+      }
+    }
+
+    def broadcastWhoIsHere(step: Int, observation: Observation): Unit = {
+      val message = WhoIsHere(
+        senderName = agentName,
+        senderStep = step,
+        senderGlobalPos = globalPosition,
+        senderPercept = observation.things
+      )
+      for (i <- 1 to teamSize if s"agent$team$i" != agentName) {
+        context.actorSelection(s"/user/agent$team$i") ! message
+      }
+    }
+
+    def handleWhoIsHere(msg: WhoIsHere): Unit = {
+      if (msg.senderStep != currentStep) return
+
+      val maybeOffset = CoordinateAlignment.findOffset(observation.get.things, msg.senderPercept)
+      maybeOffset.foreach { offset =>
+        knownAgents(msg.senderName) = KnownAgent(msg.senderName, offset, currentStep)
+        val sharedData = ShareMap(
+          senderName = agentName,
+          senderStep = currentStep,
+          translatedMap = globalMap.filterNot { case (k, _) => globalMap.contains(k) }
+        )
+        context.actorSelection(s"/user/${msg.senderName}") ! sharedData
+      }
+    }
+
+    def handleMapShare(msg: ShareMap): Unit = {
+      knownAgents.get(msg.senderName).foreach { known =>
+        val transformedMap = msg.translatedMap.map { case (coord, typ) =>
+          (coord + known.offset) -> typ
+        }
+        MapMerger.merge(globalMap, transformedMap)
+      }
+    }
+
+//    def handleActionRequest(json: Json) = {
+//      val observation = createObservation(json)
+//      this.lastObservation = observation
+//      val step = observation.simulation.getSimulationStep
+//      observation.updateKnownMap()
+//      broadcastWhoIsHere(step, observation)
+//      // ... rest of planning ...
+//    }
 
     def createObservation(json: Json): Observation = {
       val cursor = json.hcursor
@@ -163,7 +215,7 @@ package actors {
 
 
       val step = content.get[Int]("step").getOrElse(0)
-
+      this.currentStep = step
 
       val tasks = percept.get[Vector[Task]]("tasks").getOrElse(Vector())
       println("Tasks: " + tasks)
@@ -249,6 +301,7 @@ package actors {
       val observation = createObservation(json)
       observation.updateKnownMap()
       observation.printKnownDispenserSummary()
+      this.observation = Some(observation)
 
       val action = intentionHandler.planNextAction(observation)
       val actionType = action.actionType
