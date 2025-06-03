@@ -16,6 +16,7 @@ class ClearUnitIntention(val target: Coordinate) extends Intention {
   private var skipIntention: SkipIntention = new SkipIntention()
   private var finished: Boolean = false
 
+  //TODO - Be careful with an infinite loop caused by TravelIntention -> PathExecutor (No Path) -> ClearIntention -> TravelIntention
   override def planNextAction(observation: Observation): AgentAction = {
     if (observation.isUnknown(target)) {
       if (travelIntention.isEmpty)
@@ -24,7 +25,7 @@ class ClearUnitIntention(val target: Coordinate) extends Intention {
     }
 
     val freeNeighbors = target.neighbors().filter { c =>
-      c == observation.currentPos || observation.globalMap.get(c).forall(t => t != "block" && t != "entity")
+      c == observation.currentPos || observation.globalMap.get(c).forall(t => t.`type` != "block" && t.`type` != "entity")
     }
 
     if (freeNeighbors.isEmpty) {
@@ -45,7 +46,7 @@ class ClearUnitIntention(val target: Coordinate) extends Intention {
   }
 
   override def checkFinished(observation: Observation): Boolean = {
-    finished || observation.globalMap.get(target).exists(t => t == "cleared" || t == "empty" || t == "dispenser")
+    finished || observation.globalMap.get(target).exists(t => t.`type` == "cleared" || t.`type` == "empty" || t.`type` == "dispenser")
   }
 
 }

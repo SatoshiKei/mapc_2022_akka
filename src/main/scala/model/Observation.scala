@@ -79,6 +79,17 @@ case class Observation(
     !globalMap.contains(coord)
   }
 
+  def isBlockAttachedAt(position: Coordinate, blockType: String): Boolean = {
+    attached.exists { relCoord =>
+      relCoord == position && things.exists { t =>
+        Coordinate(t.x, t.y) == position &&
+          t.`type` == "block" &&
+          t.details == blockType
+      }
+    }
+  }
+
+
   def findClosestUnknownInMap(maxDistance: Int = 20): Option[Coordinate] = {
     val visited = scala.collection.mutable.Set[Coordinate]()
     val queue = scala.collection.mutable.Queue[(Coordinate, Int)]()

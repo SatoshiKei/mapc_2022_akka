@@ -37,7 +37,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     // Step 1: Find the first attachable block from the task plan (adjacent-only)
     val immediateRequirement = task.requirements.find { req =>
       val rel = req.coordinate
-      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel)
+      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel) && !observation.isBlockAttachedAt(rel, req.`type`)
     }
 
     // Step 2: If no adjacent block found, fallback to Explore for now
@@ -47,11 +47,37 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
       return subIntention.get.planNextAction(observation)
     }
 
+    val countImmediateRequirements = task.requirements.count { req =>
+      val rel = req.coordinate
+      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel)
+    }
+
     // Step 3: Delegate to AttachFirstBlockIntention for the correct block type
     val blockType = immediateRequirement.get.`type`
-    if (subIntention.isEmpty || !subIntention.get.isInstanceOf[AttachFirstBlockIntention]) {
-      subIntention = Some(new AttachFirstBlockIntention(blockType))
+    if ((subIntention.isEmpty || !subIntention.get.isInstanceOf[AttachFirstBlockIntention]) && observation.attached.size < countImmediateRequirements) {
+      println(observation.agentId + " is pursuing immediate requirement " + observation.attached.size + 1 + " of " + countImmediateRequirements)
+      subIntention = Some(new AttachFirstBlockIntention(blockType, immediateRequirement.get.coordinate))
     }
+
+    //Step 5: Deliver the task
+    if (observation.attached.size == task.requirements.size) {
+
+      if (!observation.simulation.getRolesWithAction("submit").contains(observation.currentRole.getOrElse("standard"))) {
+        println(observation.agentId + " is looking for role to submit task")
+        subIntention = Some(new AdoptRoleIntention(observation.simulation.getRolesWithAction("submit").headOption.get))
+      } else {
+        //TODO - Goal Zones can change, calculate them dynamically
+        //val goalZoneOpt = observation.knownGoalZones.minByOption(_.distanceTo(observation.currentPos))
+        if (observation.currentPos == goalZone) {
+          SubmitAction(task.name)
+        } else {
+          println(observation.agentId + "is traveling to a goal zone at " + goalZone)
+          subIntention = Some(new TravelIntention(goalZone))
+        }
+      }
+
+    }
+
     subIntention.get.planNextAction(observation)
   }
 

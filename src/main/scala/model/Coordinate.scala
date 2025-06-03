@@ -1,4 +1,5 @@
 package model
+import scala.collection.mutable
 
 case class Coordinate(x: Int, y: Int) {
 
@@ -71,6 +72,20 @@ case class Coordinate(x: Int, y: Int) {
     case "s" => Coordinate(-x, -y)
     case "w" => Coordinate(y, -x)
   }
+
+  def mostFavorableNeighbor(globalMap: mutable.Map[Coordinate, Thing]): Option[Coordinate] = {
+    val priorities = List("empty", "obstacle", "entity", "dispenser")
+
+    val sorted = this.neighbors(1, includeDiagonals = false).sortBy { coord =>
+      globalMap.get(coord).map(_.`type`) match {
+        case Some(typ) if priorities.contains(typ) => priorities.indexOf(typ)
+        case _ => priorities.length
+      }
+    }
+
+    sorted.headOption
+  }
+
 
   def getClosestCoordByDistanceByTwoCoordsLine(start: Coordinate, end: Coordinate, distance: Int): Coordinate = {
     val dx = start.x - end.x

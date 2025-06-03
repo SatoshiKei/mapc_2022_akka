@@ -159,17 +159,42 @@ package actors {
     }
 
     def handleWhoIsHere(msg: WhoIsHere): Unit = {
-      if (msg.senderStep != currentStep) return
+      if (msg.senderStep != currentStep) {
+        println(agentName + " received an old message from " + msg.senderName + " at step " + msg.senderStep + " while the current step is " + currentStep)
+        return
+      }
 
+      println(agentName + " received a message WhoIsHere from " + msg.senderName)
       val maybeOffset = CoordinateAlignment.findOffset(observation.get.things, msg.senderPercept)
-      maybeOffset.foreach { offset =>
-        knownAgents(msg.senderName) = KnownAgent(msg.senderName, offset, currentStep)
-        val sharedData = ShareMap(
+
+      maybeOffset.foreach { relOffset =>
+        val absOffset = Coordinate(
+          globalPosition.x - msg.senderGlobalPos.x + relOffset.x,
+          globalPosition.y - msg.senderGlobalPos.y + relOffset.y
+        )
+
+        // Store the agent’s alignment offset
+        knownAgents(msg.senderName) = KnownAgent(
+          name = msg.senderName,
+          offset = absOffset,
+          lastSeenStep = currentStep
+        )
+        println(agentName + " stores " + msg.senderName + " as a known agent at step " + currentStep + " with offset " + absOffset)
+        // Translate your globalMap into *their* coordinate system by subtracting the offset
+        val translatedMap: mutable.Map[Coordinate, Thing] = globalMap.map {
+          case (coord, value) =>
+            (coord - absOffset) -> value
+        }
+
+        // Optionally: Filter out coordinates you think they already know (if you store that)
+        // For now, send everything:
+        val shareMessage = ShareMap(
           senderName = agentName,
           senderStep = currentStep,
-          translatedMap = globalMap.filterNot { case (k, _) => globalMap.contains(k) }
+          translatedMap = translatedMap
         )
-        context.actorSelection(s"/user/${msg.senderName}") ! sharedData
+
+        context.actorSelection(s"/user/${msg.senderName}") ! shareMessage
       }
     }
 
@@ -178,7 +203,8 @@ package actors {
         val transformedMap = msg.translatedMap.map { case (coord, typ) =>
           (coord + known.offset) -> typ
         }
-        MapMerger.merge(globalMap, transformedMap)
+        val totalUpdates = MapMerger.merge(globalMap, transformedMap)
+        println(agentName + " is synching global map with " + msg.senderName + " by adding " + totalUpdates + " new entries")
       }
     }
 
@@ -218,7 +244,7 @@ package actors {
       this.currentStep = step
 
       val tasks = percept.get[Vector[Task]]("tasks").getOrElse(Vector())
-      println("Tasks: " + tasks)
+//      println("Tasks: " + tasks)
 
 
       val currentRole = percept.get[String]("role").toOption
@@ -302,6 +328,7 @@ package actors {
       observation.updateKnownMap()
       //observation.printKnownDispenserSummary()
       this.observation = Some(observation)
+      broadcastWhoIsHere(currentStep, observation)
 
       val action = intentionHandler.planNextAction(observation)
       val actionType = action.actionType

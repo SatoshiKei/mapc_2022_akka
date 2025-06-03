@@ -5,7 +5,7 @@ import model._
 
 import scala.util.Random
 
-class AttachFirstBlockIntention(blockType: String) extends Intention {
+class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends Intention {
 
   private var targetCoord: Option[Coordinate] = None
   private var travelIntention: Option[TravelIntention] = None
@@ -19,7 +19,17 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
   }
 
   override def planNextAction(observation: Observation): AgentAction = {
-    if (finished) {
+
+//    val isBlockAttached = observation.attached.exists { relCoord =>
+//      observation.things.exists(t =>
+//        Coordinate(t.x, t.y) == relCoord && Coordinate(t.x, t.y) == position &&
+//          t.`type` == "block" &&
+//          t.details == blockType
+//      )
+//    }
+
+
+    if (observation.isBlockAttachedAt(position, blockType)) {
       println(observation.agentId + " is trying to complete a task that has already been completed, causing it to hault")
       return SkipAction()
     }
@@ -87,7 +97,7 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
 
     // Step 3: Move adjacent
     if (!isAdjacent) {
-      val adjacentCoordinate = target.neighbors(1, false).headOption
+      val adjacentCoordinate = target.mostFavorableNeighbor(observation.globalMap)
       println(observation.agentId + " is going to coordinate " + adjacentCoordinate.get + " adjacent to block/dispenser at" + target + "and can attach: " + hasAttachRole(observation) + " and can request: " + hasRequestRole(observation))
       if (travelIntention.isEmpty || travelIntention.get.target != adjacentCoordinate.get) {
         travelIntention = Some(new TravelIntention(adjacentCoordinate.get))
@@ -98,19 +108,23 @@ class AttachFirstBlockIntention(blockType: String) extends Intention {
     //TODO - Make sure Agent is facing dispenser
 
     // Step 4: At target — check type of entity
-    val value = observation.getTileType(target).getOrElse("empty")
+    var value = observation.getTileType(target).getOrElse("empty")
+
+    val dispenserRelative = target - observation.currentPos
+    if (observation.things.count(t => t.position == dispenserRelative) > 1) {
+      value = "block"
+      println(observation.agentId + "'s has requested a block and should now attached it")
+    }
 
     value match {
       case "dispenser" =>
-        //TODO - This logic can't use finished, I have to check attached
-        finished = true
+        println(observation.agentId + "at " + observation.currentPos +  " is requesting a block for a " + observation.currentPos.toDirection(target).getOrElse("N/A") + " at " + target)
         RequestAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "block" =>
 //        if (!observation.globalMap.get(target).exists(thing => thing.`type` == "entity")) {
 //          return ClearAction(observation.currentPos.toRelative(target))
 //        }
-        finished = true
         AttachAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "empty" =>

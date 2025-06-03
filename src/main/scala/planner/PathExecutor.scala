@@ -12,7 +12,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
   override def nextAction(observation: Observation, target: Coordinate): AgentAction = {
 
     // STEP 1: If attached to another agent, move out first
-    if (observation.simulation.getSimulationStep == 1) {
+    if (observation.things.count(t => t.x == 0 && t.y == 0) > 1) {
       val directions = List("n", "e", "s", "w")
       val moveOption = directions.find { dir =>
         val targetCoord = observation.currentPos.fromDirection(dir)
@@ -35,12 +35,12 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
         val direction = observation.currentPos.toDirection(nextCoord)
         direction match {
           case Some(desiredDir) =>
-            if (desiredDir != observation.orientation) {
-              val rotation = computeRotation(observation.orientation, desiredDir)
-              println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord + " rotation: " + rotation)
-              return rotation.map(RotateAction(_)).getOrElse(SkipAction())
-            }
-            println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord)
+//            if (desiredDir != observation.orientation) {
+//              val rotation = computeRotation(observation.orientation, desiredDir)
+//              println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord + " rotation: " + rotation)
+//              return rotation.map(RotateAction(_)).getOrElse(SkipAction())
+//            }
+//            println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord)
 //            clearPlanner.shouldClear(observation, desiredDir).getOrElse(MoveAction(desiredDir))
             clearPlanner.shouldClear(observation, desiredDir) match {
               case Some(clearAction) => clearAction

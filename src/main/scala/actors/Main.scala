@@ -9,7 +9,7 @@ object Main extends App {
   val teamA = "A"
   val teamB = "B"
   val password = "1"
-  val numberOfAgents = 1
+  val numberOfAgents = 2
 
   for (i <- 1 until numberOfAgents+1) {
     val agentNameA = s"agent${teamA}${i}"
