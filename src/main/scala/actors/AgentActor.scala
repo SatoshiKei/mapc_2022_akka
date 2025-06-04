@@ -158,10 +158,40 @@ package actors {
       }
     }
 
+    def broadcastMapShare(): Unit = {
+      for ((agentName, known) <- knownAgents) {
+        // Step 1: Translate your map into *their* coordinate system using their offset
+        val translatedMap: Map[Coordinate, Thing] = globalMap.iterator.map { //TODO - Not sure if it's necessary to force a map snapshot here
+          case (coord, value) => (coord - known.offset) -> value
+        }.toMap
+
+        // Step 2: Construct and send the ShareMap message
+        val shareMessage = ShareMap(
+          senderName = this.agentName,  // assuming you have this.agentName in scope
+          senderStep = currentStep,
+          translatedMap = translatedMap
+        )
+
+        // Step 3: Send to the agent via actor selection
+        context.actorSelection(s"/user/$agentName") ! shareMessage
+      }
+
+    }
+
     def handleWhoIsHere(msg: WhoIsHere): Unit = {
       if (msg.senderStep != currentStep) {
         println(agentName + " received an old message from " + msg.senderName + " at step " + msg.senderStep + " while the current step is " + currentStep)
         return
+      }
+
+      observation match {
+        case Some(observation) =>
+          if (observation.things.count(t => t.`type` == "entity") == 1) {
+            println(agentName + " is not seeing any agent at the moment")
+            return
+          }
+        case None =>
+          return
       }
 
       println(agentName + " received a message WhoIsHere from " + msg.senderName)
@@ -174,27 +204,14 @@ package actors {
         )
 
         // Store the agent’s alignment offset
-        knownAgents(msg.senderName) = KnownAgent(
-          name = msg.senderName,
-          offset = absOffset,
-          lastSeenStep = currentStep
-        )
-        println(agentName + " stores " + msg.senderName + " as a known agent at step " + currentStep + " with offset " + absOffset)
-        // Translate your globalMap into *their* coordinate system by subtracting the offset
-        val translatedMap: mutable.Map[Coordinate, Thing] = globalMap.map {
-          case (coord, value) =>
-            (coord - absOffset) -> value
+        if (!knownAgents.contains(msg.senderName)) {
+          knownAgents(msg.senderName) = KnownAgent(
+            name = msg.senderName,
+            offset = absOffset,
+            lastSeenStep = currentStep
+          )
+          println(agentName + " stores " + msg.senderName + " as a known agent at step " + currentStep + " with offset " + absOffset)
         }
-
-        // Optionally: Filter out coordinates you think they already know (if you store that)
-        // For now, send everything:
-        val shareMessage = ShareMap(
-          senderName = agentName,
-          senderStep = currentStep,
-          translatedMap = translatedMap
-        )
-
-        context.actorSelection(s"/user/${msg.senderName}") ! shareMessage
       }
     }
 
@@ -204,6 +221,7 @@ package actors {
           (coord + known.offset) -> typ
         }
         val totalUpdates = MapMerger.merge(globalMap, transformedMap)
+        //TODO - After ensuring messages are coming fine, log only successfull map updates. (i.e, totalUpdates > 0)
         println(agentName + " is synching global map with " + msg.senderName + " by adding " + totalUpdates + " new entries")
       }
     }
@@ -326,9 +344,12 @@ package actors {
 
       val observation = createObservation(json)
       observation.updateKnownMap()
-      //observation.printKnownDispenserSummary()
       this.observation = Some(observation)
-      broadcastWhoIsHere(currentStep, observation)
+
+      if (observation.things.count(t => t.`type` == "entity") > 1) {
+        broadcastWhoIsHere(currentStep, observation)
+      }
+      broadcastMapShare()
 
       val action = intentionHandler.planNextAction(observation)
       val actionType = action.actionType
@@ -360,7 +381,7 @@ package actors {
           y <- cursor.get[Int]("y").toOption
           typ <- cursor.get[String]("type").toOption
           details <- cursor.get[String]("details").toOption
-        } yield Thing(x, y, typ, details)
+        } yield Thing(x, y, typ, details, currentStep)
       }
     }
 

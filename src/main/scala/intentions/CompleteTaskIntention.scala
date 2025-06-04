@@ -78,7 +78,13 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
 
     }
 
-    subIntention.get.planNextAction(observation)
+    subIntention match {
+      case Some(intention: Intention) =>
+        intention.planNextAction(observation)
+      case None =>
+        println(observation.agentId + " is exploring because they cannot complete task " + task.name)
+        new ExploreIntention().planNextAction(observation)
+    }
   }
 
 

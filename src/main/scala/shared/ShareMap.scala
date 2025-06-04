@@ -6,5 +6,5 @@ import scala.collection.mutable
 case class ShareMap(
                      senderName: String,
                      senderStep: Int,
-                     translatedMap: mutable.Map[Coordinate, Thing]
+                     translatedMap: Map[Coordinate, Thing]
                    )

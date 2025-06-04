@@ -55,7 +55,7 @@ case class Observation(
       val rel = Coordinate(dx, dy)
       val abs = currentPos + rel
       if (!things.exists(t => t.x == dx && t.y == dy) && math.abs(dx) + math.abs(dy) <= visionRadius) {
-        globalMap.update(abs, Thing(dx, dy, "empty", ""))
+        globalMap.update(abs, Thing(dx, dy, "empty", "", simulation.getSimulationStep))
       }
     }
     println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep + " Dispensers: " + knownDispenserSummary())
