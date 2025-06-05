@@ -12,9 +12,8 @@ case class Observation(
                         simulation: Simulation,
                         globalMap: mutable.Map[Coordinate, Thing],
                         goalZones: Set[Coordinate],
-                        roleZones: Set[Coordinate],
-                        knownGoalZones: Set[Coordinate],
-                        knownRoleZones: Set[Coordinate]
+                        knownGoalZones: mutable.Map[Coordinate, Zone],
+                        knownRoleZones: mutable.Map[Coordinate, Zone]
                       ) {
 
   def getBlockedDirections: Set[String] = {
@@ -43,9 +42,6 @@ case class Observation(
       globalMap.update(absolute, thing)
     }
 
-    // Also record the agent's own current position as "entity:team"
-//    globalMap.update(currentPos, "entity:"+simulation.teamName)
-
     // Mark empty tiles within vision that are not occupied by anything
     for {
       dx <- -visionRadius to visionRadius
@@ -57,6 +53,13 @@ case class Observation(
       if (!things.exists(t => t.x == dx && t.y == dy) && math.abs(dx) + math.abs(dy) <= visionRadius) {
         globalMap.update(abs, Thing(dx, dy, "empty", "", simulation.getSimulationStep))
       }
+
+      //Goal zones can move, so set them as inactive if they are present in the zone map, but vanished from the local percept
+      knownGoalZones.get(abs) match {
+        case Some(zone) if zone.active && !goalZones.contains(abs) =>
+          knownGoalZones.update(abs, zone.copy(simulation.getSimulationStep, active = false))
+        case _ =>
+      }
     }
     println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep + " Dispensers: " + knownDispenserSummary())
   }
@@ -66,14 +69,17 @@ case class Observation(
   }
 
   def getKnownRoleZones: Set[Coordinate] = {
-//    globalMap.filter(_._2 == "role").keys.toSet
-    knownRoleZones
+    knownRoleZones.collect {
+      case (coord, zone) if zone.active => coord
+    }.toSet
   }
 
   def getKnownGoalZones: Set[Coordinate] = {
-//    globalMap.filter(_._2 == "goal").keys.toSet
-    knownGoalZones
+    knownGoalZones.collect {
+      case (coord, zone) if zone.active => coord
+    }.toSet
   }
+
 
   def isUnknown(coord: Coordinate): Boolean = {
     !globalMap.contains(coord)
@@ -88,6 +94,23 @@ case class Observation(
       }
     }
   }
+
+  def isBlockAttached(blockType: String): Boolean = {
+    attached.exists { relCoord =>
+      things.exists { t =>
+          t.`type` == "block" &&
+          t.details == blockType
+      }
+    }
+  }
+
+  def behind(target: Coordinate): Coordinate = {
+    val dx = target.x - currentPos.x
+    val dy = target.y - currentPos.y
+
+    Coordinate( - dx,  - dy)
+  }
+
 
 
   def findClosestUnknownInMap(maxDistance: Int = 20): Option[Coordinate] = {

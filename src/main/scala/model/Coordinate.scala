@@ -73,6 +73,15 @@ case class Coordinate(x: Int, y: Int) {
     case "w" => Coordinate(y, -x)
   }
 
+  def getOrderedPerpendiculars: (Coordinate, Coordinate) = this match {
+    case Coordinate(0, -1) => (Coordinate(-1, 0), Coordinate(1, 0)) // Facing north: left=w, right=e
+    case Coordinate(0, 1)  => (Coordinate(1, 0), Coordinate(-1, 0)) // Facing south: left=e, right=w
+    case Coordinate(-1, 0) => (Coordinate(0, 1), Coordinate(0, -1)) // Facing west: left=s, right=n
+    case Coordinate(1, 0)  => (Coordinate(0, -1), Coordinate(0, 1)) // Facing east: left=n, right=s
+    case _ => (Coordinate(0, 0), Coordinate(0, 0)) // Invalid
+  }
+
+
   def mostFavorableNeighbor(globalMap: mutable.Map[Coordinate, Thing]): Option[Coordinate] = {
     val priorities = List("empty", "obstacle", "entity", "dispenser")
 

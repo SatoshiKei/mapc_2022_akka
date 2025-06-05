@@ -29,7 +29,7 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
 //    }
 
 
-    if (observation.isBlockAttachedAt(position, blockType)) {
+    if (observation.isBlockAttached(blockType)) {
       println(observation.agentId + " is trying to complete a task that has already been completed, causing it to hault")
       return SkipAction()
     }
@@ -163,7 +163,7 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
   def costToAcquire(observation: Observation, roleNeeded: Option[String]): Int = {
     if (roleNeeded.isEmpty || observation.currentRole.exists(roleNeeded.contains)) 0
     else math.round(
-      observation.knownRoleZones
+      observation.getKnownRoleZones
         .map(_.distanceTo(observation.currentPos))
         .reduceOption((a, b) => math.min(a, b))
         .getOrElse(100.0)

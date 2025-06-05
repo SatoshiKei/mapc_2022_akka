@@ -31,27 +31,21 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     }
     println(observation.agentId + " is finding a path from " + observation.currentPos + " to " + target)
     findPath(observation.globalMap, observation.currentPos, target, observation.visionRadius) match {
-      case Right(nextCoord) =>
+      case Right(nextCoord: Coordinate) =>
         val direction = observation.currentPos.toDirection(nextCoord)
         direction match {
           case Some(desiredDir) =>
-//            if (desiredDir != observation.orientation) {
-//              val rotation = computeRotation(observation.orientation, desiredDir)
-//              println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord + " rotation: " + rotation)
-//              return rotation.map(RotateAction(_)).getOrElse(SkipAction())
-//            }
-//            println(s"${observation.agentId}'s current orientation: ${observation.orientation}, desired: $desiredDir, target coordinate: " + nextCoord)
-//            clearPlanner.shouldClear(observation, desiredDir).getOrElse(MoveAction(desiredDir))
-            clearPlanner.shouldClear(observation, desiredDir) match {
-              case Some(clearAction) => clearAction
-              case None => {
-                if (observation.isPassable(nextCoord))
-                  MoveAction(desiredDir)
-                else {
-                  findDodgeDirection(observation).map(MoveAction(_)).getOrElse(SkipAction())
-                }
+            // Step A: Rotate if carrying a block and not oriented to drag it correctly
+            if (observation.attached.nonEmpty) {
+              handleMoveWhileCarying(observation, nextCoord) match {
+                case Some(action: AgentAction) =>
+                  return action
+                case _ =>
               }
             }
+
+            // Step C: Clear or move
+            getCleanOrDodgeAction(observation, desiredDir, nextCoord)
 
           case None =>
             println(s"[ERROR] Can't rotate toward $nextCoord"); SkipAction()
@@ -68,6 +62,18 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     }
   }
 
+  def getCleanOrDodgeAction(observation: Observation, direction: String, target: Coordinate) = {
+    clearPlanner.shouldClear(observation, direction) match {
+      case Some(clearAction) => clearAction
+      case None =>
+        if (observation.isPassable(target))
+          MoveAction(direction)
+        else {
+          findDodgeDirection(observation).map(MoveAction(_)).getOrElse(SkipAction())
+        }
+    }
+  }
+
   def findDodgeDirection(obs: Observation): Option[String] = {
     List("n", "e", "s", "w").find { dir =>
       val coord = obs.currentPos.fromDirection(dir) + obs.currentPos
@@ -75,6 +81,66 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       obs.globalMap.get(coord).forall(v => v.`type` == "empty" || v.`type` == "unknown")
     }
   }
+
+  def handleMoveWhileCarying(observation: Observation, target: Coordinate): Option[AgentAction] = {
+    actionToDragBlockBehind(observation, target)
+  }
+
+  def actionToDragBlockBehind(observation: Observation, target: Coordinate): Option[AgentAction] = {
+    if (observation.attached.isEmpty) return None
+
+    val behind = observation.behind(target)
+    val block = observation.attached.head
+
+    println(observation.agentId + " at " + observation.currentPos +  " is carrying a block at " + block + " and pretends to go to target " + target + " after rotating behind " + behind)
+
+    val rotation = (block, behind) match {
+      case (b, e) if b == e =>
+        println(observation.agentId + " is already behind — no rotation needed")
+        None
+      case (Coordinate(x, y), Coordinate(x2, y2)) if x == -x2 && y == -y2 =>
+        println(observation.agentId +" is opposite to behind — needs 180° rotation")
+        Some("180")
+      case (Coordinate(x, y), Coordinate(x2, y2)) if math.abs(x - x2) == math.abs(y + y2) =>
+        println(observation.agentId + " is perpendicular to behind — needs one rotation")
+        Some("90")
+      case _ =>
+        println(observation.agentId + " could not find a valid rotation")
+        None
+    }
+
+    val absBehind = observation.currentPos + behind
+
+    rotation match {
+      case Some("90") =>
+        observation.getTileType(absBehind) match {
+          case Some("empty") =>
+            Some(RotateAction("cw"))
+          case _ =>
+            val direction = observation.currentPos.toDirection(absBehind).get //TODO - This could be NONE
+            Some(getCleanOrDodgeAction(observation, direction, absBehind))
+        }
+      case Some("180") =>
+        val (left, right) = target.getOrderedPerpendiculars
+        val leftTile = observation.currentPos + left
+        val rightTile = observation.currentPos + right
+
+        val canRotateLeft = observation.getTileType(leftTile).contains("empty")
+        val canRotateRight = observation.getTileType(rightTile).contains("empty")
+
+        (canRotateLeft, canRotateRight) match {
+          case (true, false) => Some(RotateAction("ccw"))
+          case (false, true) => Some(RotateAction("cw"))
+          case (true, true)  => Some(RotateAction("cw"))
+          case _ =>
+            val direction = observation.currentPos.toDirection(leftTile).get //TODO - This could be NONE : but how? It should always be within map range
+            Some(getCleanOrDodgeAction(observation, direction, leftTile))
+        }
+      case None =>
+        None
+    }
+  }
+
 
 
 

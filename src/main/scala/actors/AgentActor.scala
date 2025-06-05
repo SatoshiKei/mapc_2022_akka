@@ -9,7 +9,7 @@ package actors {
   import io.circe.parser._
   import io.circe.syntax._
   import io.circe.generic.auto._
-  import model.{AgentAction, Coordinate, Observation, Role, Thing}
+  import model.{AgentAction, Coordinate, Observation, Role, Thing, Zone}
   import shared.{CoordinateAlignment, KnownAgent, MapMerger, ShareMap, WhoIsHere}
 
   import scala.collection.mutable
@@ -31,8 +31,8 @@ package actors {
     var globalPosition: Coordinate = Coordinate(0, 0)
     val targetPosition: Coordinate = Coordinate(0, 0)
     var globalMap: mutable.Map[Coordinate, Thing] = mutable.Map.empty
-    var knownRoleZones: Set[Coordinate] = Set.empty
-    var knownGoalZones: Set[Coordinate] = Set.empty
+    var knownGoalZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
+    var knownRoleZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
     var orientation: String = "n"
     var currentRole: String = "std"
     var allRoles: Vector[Role] = Vector()
@@ -160,23 +160,45 @@ package actors {
 
     def broadcastMapShare(): Unit = {
       for ((agentName, known) <- knownAgents) {
-        // Step 1: Translate your map into *their* coordinate system using their offset
-        val translatedMap: Map[Coordinate, Thing] = globalMap.iterator.map { //TODO - Not sure if it's necessary to force a map snapshot here
-          case (coord, value) => (coord - known.offset) -> value
+        val offset = known.offset
+
+        // Step 1: Translate your map into *their* coordinate system
+        val translatedMap: Map[Coordinate, Thing] = globalMap.iterator.map {
+          case (coord, value) => (coord - offset) -> value
         }.toMap
 
-        // Step 2: Construct and send the ShareMap message
+        // Step 2: Translate goal zones
+        val translatedGoalZones: Map[Coordinate, Zone] = knownGoalZones.iterator.map {
+          case (coord, zone) => (coord - offset) -> zone
+        }.toMap
+
+        // Step 3: Translate role zones
+        val translatedRoleZones: Map[Coordinate, Zone] = knownRoleZones.iterator.map {
+          case (coord, zone) => (coord - offset) -> zone
+        }.toMap
+
+        // Step 4: Translate known agents' offsets into receiver's coordinate system
+        val translatedKnownAgents: Map[String, KnownAgent] = knownAgents.map {
+          case (name, agent) =>
+            val translatedOffset = agent.offset - offset
+            name -> agent.copy(offset = translatedOffset)
+        }.toMap
+
+        // Step 5: Construct and send the ShareMap message
         val shareMessage = ShareMap(
-          senderName = this.agentName,  // assuming you have this.agentName in scope
+          senderName = this.agentName,
           senderStep = currentStep,
-          translatedMap = translatedMap
+          translatedMap = translatedMap,
+          translatedGoalZones = translatedGoalZones,
+          translatedRoleZones = translatedRoleZones,
+          translatedKnownAgents = translatedKnownAgents
         )
 
-        // Step 3: Send to the agent via actor selection
+        // Step 6: Send to the agent via actor selection
         context.actorSelection(s"/user/$agentName") ! shareMessage
       }
-
     }
+
 
     def handleWhoIsHere(msg: WhoIsHere): Unit = {
       if (msg.senderStep != currentStep) {
@@ -187,14 +209,14 @@ package actors {
       observation match {
         case Some(observation) =>
           if (observation.things.count(t => t.`type` == "entity") == 1) {
-            println(agentName + " is not seeing any agent at the moment")
+            //println(agentName + " is not seeing any agent at the moment")
             return
           }
         case None =>
           return
       }
 
-      println(agentName + " received a message WhoIsHere from " + msg.senderName)
+      //println(agentName + " received a message WhoIsHere from " + msg.senderName)
       val maybeOffset = CoordinateAlignment.findOffset(observation.get.things, msg.senderPercept)
 
       maybeOffset.foreach { relOffset =>
@@ -210,23 +232,53 @@ package actors {
             offset = absOffset,
             lastSeenStep = currentStep
           )
-          println(agentName + " stores " + msg.senderName + " as a known agent at step " + currentStep + " with offset " + absOffset)
+          //println(agentName + " stores " + msg.senderName + " as a known agent at step " + currentStep + " with offset " + absOffset)
         }
       }
     }
 
-    def handleMapShare(msg: ShareMap): Unit = {
+    def handleMapShare2(msg: ShareMap): Unit = {
       knownAgents.get(msg.senderName).foreach { known =>
         val transformedMap = msg.translatedMap.map { case (coord, typ) =>
           (coord + known.offset) -> typ
         }
         val totalUpdates = MapMerger.merge(globalMap, transformedMap)
         //TODO - After ensuring messages are coming fine, log only successfull map updates. (i.e, totalUpdates > 0)
-        println(agentName + " is synching global map with " + msg.senderName + " by adding " + totalUpdates + " new entries")
+        //println(agentName + " is synching global map with " + msg.senderName + " by adding " + totalUpdates + " new entries")
       }
     }
 
-//    def handleActionRequest(json: Json) = {
+    def handleMapShare(msg: ShareMap): Unit = {
+      knownAgents.get(msg.senderName).foreach { known =>
+
+        // 1. Merge global map
+        val totalMapUpdates = MapMerger.merge(globalMap, msg.translatedMap)
+
+        // 2. Merge goal zones
+        val updatedGoals = MapMerger.mergeZones(knownGoalZones, msg.translatedGoalZones)
+
+        // 3. Merge role zones
+        val updatedRoles = MapMerger.mergeZones(knownRoleZones, msg.translatedRoleZones)
+
+        // 👥 4. Merge known agents
+        msg.translatedKnownAgents.foreach {
+          case (otherName, sharedAgent) =>
+            if (otherName != agentName) {
+              if (!knownAgents.contains(otherName)) {
+                knownAgents.update(otherName, KnownAgent(otherName, sharedAgent.offset, sharedAgent.lastSeenStep))
+              }
+            }
+        }
+
+        // ✅ Log summary
+        if (totalMapUpdates > 0 || updatedGoals > 0 || updatedRoles > 0) {
+          println(s"$agentName synced map from ${msg.senderName}: $totalMapUpdates tiles, $updatedGoals goal zones, $updatedRoles role zones")
+        }
+      }
+    }
+
+
+    //    def handleActionRequest(json: Json) = {
 //      val observation = createObservation(json)
 //      this.lastObservation = observation
 //      val step = observation.simulation.getSimulationStep
@@ -299,13 +351,12 @@ package actors {
           .toSet
 //      println("Current: " + globalPosition + "Percept: " + percept.get[Vector[(Int, Int)]]("roleZones") + " roleZones: " + roleZones)
 
-
       goalZones.foreach { coord =>
-        knownGoalZones += coord
+        knownGoalZones.update(coord, Zone(currentStep, active = true))
       }
 
       roleZones.foreach { coord =>
-        knownRoleZones += coord
+        knownRoleZones.update(coord, Zone(currentStep, active = true))
       }
 
 
@@ -332,7 +383,6 @@ package actors {
         globalMap = globalMap,
         simulation = sim,
         goalZones = goalZones,
-        roleZones = roleZones,
         knownGoalZones = knownGoalZones,
         knownRoleZones = knownRoleZones
       )

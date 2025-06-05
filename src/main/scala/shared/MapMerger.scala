@@ -1,5 +1,6 @@
 package shared
-import model.{Coordinate, Thing}
+import model.{Coordinate, Thing, Zone}
+
 import scala.collection.mutable
 
 object MapMerger {
@@ -19,4 +20,21 @@ object MapMerger {
     }
     totalUpdates
   }
+
+  def mergeZones(local: mutable.Map[Coordinate, Zone], incoming: Map[Coordinate, Zone]): Int = {
+    var count = 0
+    for ((coord, zone) <- incoming) {
+      local.get(coord) match {
+        case Some(existing) if zone.step > existing.step =>
+          local.update(coord, zone)
+          count += 1
+        case None =>
+          local.update(coord, zone)
+          count += 1
+        case _ =>
+      }
+    }
+    count
+  }
+
 }

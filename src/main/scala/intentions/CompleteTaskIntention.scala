@@ -40,16 +40,16 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
       Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel) && !observation.isBlockAttachedAt(rel, req.`type`)
     }
 
-    // Step 2: If no adjacent block found, fallback to Explore for now
-    if (immediateRequirement.isEmpty) {
-      println(s"${observation.agentId} found no immediate attachable block for ${task.name}")
-      if (!subIntention.exists(_.isInstanceOf[ExploreIntention])) subIntention = Some(new ExploreIntention())
-      return subIntention.get.planNextAction(observation)
-    }
-
     val countImmediateRequirements = task.requirements.count { req =>
       val rel = req.coordinate
       Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel)
+    }
+
+    // Step 2: If no adjacent block found, fallback to Explore for now
+    if (immediateRequirement.isEmpty || observation.attached.size == countImmediateRequirements) {
+      println(s"${observation.agentId} found no immediate attachable block for ${task.name}")
+      if (!subIntention.exists(_.isInstanceOf[ExploreIntention])) subIntention = Some(new ExploreIntention())
+      return subIntention.get.planNextAction(observation)
     }
 
     // Step 3: Delegate to AttachFirstBlockIntention for the correct block type
@@ -67,7 +67,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
         subIntention = Some(new AdoptRoleIntention(observation.simulation.getRolesWithAction("submit").headOption.get))
       } else {
         //TODO - Goal Zones can change, calculate them dynamically
-        //val goalZoneOpt = observation.knownGoalZones.minByOption(_.distanceTo(observation.currentPos))
+        //val goalZoneOpt = observation.getKnownGoalZones.minByOption(_.distanceTo(observation.currentPos))
         if (observation.currentPos == goalZone) {
           SubmitAction(task.name)
         } else {

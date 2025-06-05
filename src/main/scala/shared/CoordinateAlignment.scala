@@ -5,7 +5,7 @@ import model.{Coordinate, Thing}
 object CoordinateAlignment {
 
   def findOffset(mine: Vector[Thing], theirs: Vector[Thing]): Option[Coordinate] = {
-    val myEntities = mine.filter(_.`type` == "entity")
+    val myEntities = mine.filter(_.`type` == "entity") //TODO - Check if they belong to the same team
     val theirEntities = theirs.filter(_.`type` == "entity")
 
     val myThingsMap = mine.map(t => Coordinate(t.x, t.y) -> t).toMap
