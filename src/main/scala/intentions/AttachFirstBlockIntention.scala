@@ -20,15 +20,6 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
 
   override def planNextAction(observation: Observation): AgentAction = {
 
-//    val isBlockAttached = observation.attached.exists { relCoord =>
-//      observation.things.exists(t =>
-//        Coordinate(t.x, t.y) == relCoord && Coordinate(t.x, t.y) == position &&
-//          t.`type` == "block" &&
-//          t.details == blockType
-//      )
-//    }
-
-
     if (observation.isBlockAttached(blockType)) {
       println(observation.agentId + " is trying to complete a task that has already been completed, causing it to hault")
       return SkipAction()
@@ -42,9 +33,6 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
       val currentRole = observation.currentRole
       val attachRoles = observation.simulation.getRolesWithAction("attach")
       val requestRoles = observation.simulation.getRolesWithAction("request")
-
-//      val abandonedCost: Option[Int] = abandoned.map(c => totalCost(observation, c, attachRoles.find(r => !currentRole.contains(r))))
-//      val dispenserCost: Option[Int] = dispenser.map(c => totalCost(observation, c, requestRoles.find(r => !currentRole.contains(r))))
 
       val abandonedCost = abandoned.map { coord =>
         val role = attachRoles.find(r => !currentRole.contains(r))
@@ -105,8 +93,6 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
       return travelIntention.get.planNextAction(observation)
     }
 
-    //TODO - Make sure Agent is facing dispenser
-
     // Step 4: At target — check type of entity
     var value = observation.getTileType(target).getOrElse("empty")
 
@@ -122,9 +108,6 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
         RequestAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "block" =>
-//        if (!observation.globalMap.get(target).exists(thing => thing.`type` == "entity")) {
-//          return ClearAction(observation.currentPos.toRelative(target))
-//        }
         AttachAction(observation.currentPos.toDirection(target).getOrElse("n"))
 
       case "empty" =>

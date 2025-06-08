@@ -33,7 +33,7 @@ package actors {
     var globalMap: mutable.Map[Coordinate, Thing] = mutable.Map.empty
     var knownGoalZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
     var knownRoleZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
-    var orientation: String = "n"
+    //var orientation: String = "n"
     var currentRole: String = "std"
     var allRoles: Vector[Role] = Vector()
     var team: String = ""
@@ -119,12 +119,12 @@ package actors {
               val lastActionResult = json.hcursor.downField("content").downField("percept").get[String]("lastActionResult").getOrElse("")
 
               if (lastAction == "move" && lastActionResult == "success") {
-                globalPosition = globalPosition + globalPosition.fromDirection(lastActionParams)
+                globalPosition = globalPosition + Coordinate.fromDirection(lastActionParams)
               }
 
-              if (lastAction == "rotate" && lastActionResult == "success") {
-                orientation = rotateDirection(orientation, lastActionParams)
-              }
+//              if (lastAction == "rotate" && lastActionResult == "success") {
+//                orientation = rotateDirection(orientation, lastActionParams)
+//              }
 
               println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
               val action = handleActionRequest(json)
@@ -375,7 +375,6 @@ package actors {
       Observation(
         agentId = agentId,
         currentPos = currentPos,
-        orientation = orientation,
         energy = energy,
         things = things,
         attached = attached,
@@ -436,89 +435,89 @@ package actors {
     }
 
 
-    def getBlockedDirections(things: Vector[Json]): List[String] = {
-      things.flatMap { thing =>
-        val typ = thing.hcursor.get[String]("type").getOrElse("")
-        val (x, y) = getThingCoordinates(Some(thing))
-        if (typ == "obstacle" || typ == "entity") directionFromCoordinates(x, y) else None
-      }.toList
-    }
+//    def getBlockedDirections(things: Vector[Json]): List[String] = {
+//      things.flatMap { thing =>
+//        val typ = thing.hcursor.get[String]("type").getOrElse("")
+//        val (x, y) = getThingCoordinates(Some(thing))
+//        if (typ == "obstacle" || typ == "entity") directionFromCoordinates(x, y) else None
+//      }.toList
+//    }
 
-    def findThingDirection(things: Vector[Json], targetType: String): Option[String] = {
-      val thing = things.find(t => t.hcursor.get[String]("type").getOrElse("") == targetType).asJson
-      val (x, y) = getThingCoordinates(Some(thing))
-      directionFromCoordinates(x, y)
-    }
+//    def findThingDirection(things: Vector[Json], targetType: String): Option[String] = {
+//      val thing = things.find(t => t.hcursor.get[String]("type").getOrElse("") == targetType).asJson
+//      val (x, y) = getThingCoordinates(Some(thing))
+//      directionFromCoordinates(x, y)
+//    }
 
 
 
-    def directionFromCoordinates(x: Int, y: Int): Option[String] = (x, y) match {
-      case (0, -1) => Some("n")
-      case (0, 1)  => Some("s")
-      case (-1, 0) => Some("w")
-      case (1, 0)  => Some("e")
-      case _      => None
-    }
+//    def directionFromCoordinates(x: Int, y: Int): Option[String] = (x, y) match {
+//      case (0, -1) => Some("n")
+//      case (0, 1)  => Some("s")
+//      case (-1, 0) => Some("w")
+//      case (1, 0)  => Some("e")
+//      case _      => None
+//    }
 
-    def getThingCoordinates(thing: Option[Json]): (Int, Int) = {
-      val cursor = thing.map(_.hcursor).getOrElse(Json.Null.hcursor)
-      val x = cursor.get[Int]("x").getOrElse(0)
-      val y = cursor.get[Int]("y").getOrElse(0)
-      (x, y)
-    }
+//    def getThingCoordinates(thing: Option[Json]): (Int, Int) = {
+//      val cursor = thing.map(_.hcursor).getOrElse(Json.Null.hcursor)
+//      val x = cursor.get[Int]("x").getOrElse(0)
+//      val y = cursor.get[Int]("y").getOrElse(0)
+//      (x, y)
+//    }
 
-    def decideAction(cursor: HCursor): String = {
-      val thingsCursor = cursor.downField("content").downField("percept").downField("things")
-      val things = thingsCursor.as[Vector[Json]].getOrElse(Vector.empty)
-
-      // 1. Try to find an obstacle adjacent to the agent
-      val obstacleNearby = things.exists { t =>
-        val c = t.hcursor
-        val tpe = c.get[String]("type").getOrElse("")
-        val x = c.get[Int]("x").getOrElse(99)
-        val y = c.get[Int]("y").getOrElse(99)
-
-        tpe == "obstacle" && math.abs(x) + math.abs(y) == 1
-      }
-
-      if (obstacleNearby) {
-        return "clear"
-      }
-
-      // 2. Try to find a free direction to move
-      val blockedDirs = things.flatMap { t =>
-        val c = t.hcursor
-        val tpe = c.get[String]("type").getOrElse("")
-        val x = c.get[Int]("x").getOrElse(99)
-        val y = c.get[Int]("y").getOrElse(99)
-
-        if (tpe != "entity" && tpe != "obstacle") None
-        else {
-          (x, y) match {
-            case (0, -1) => Some("n")
-            case (0, 1)  => Some("s")
-            case (1, 0)  => Some("e")
-            case (-1, 0) => Some("w")
-            case _ => None
-          }
-        }
-      }.toSet
-
-      val allDirs = Seq("n", "s", "e", "w")
-      val freeDirs = allDirs.filterNot(blockedDirs.contains)
-
-      freeDirs.headOption.map(_ => "move").getOrElse("skip")
-    }
-
-    def rotateDirection(current: String, rotation: String): String = {
-      val directions = Seq("n", "e", "s", "w")
-      val idx = directions.indexOf(current)
-      rotation match {
-        case "cw" => directions((idx + 1) % 4)
-        case "ccw" => directions((idx + 3) % 4)
-        case _ => current
-      }
-    }
+//    def decideAction(cursor: HCursor): String = {
+//      val thingsCursor = cursor.downField("content").downField("percept").downField("things")
+//      val things = thingsCursor.as[Vector[Json]].getOrElse(Vector.empty)
+//
+//      // 1. Try to find an obstacle adjacent to the agent
+//      val obstacleNearby = things.exists { t =>
+//        val c = t.hcursor
+//        val tpe = c.get[String]("type").getOrElse("")
+//        val x = c.get[Int]("x").getOrElse(99)
+//        val y = c.get[Int]("y").getOrElse(99)
+//
+//        tpe == "obstacle" && math.abs(x) + math.abs(y) == 1
+//      }
+//
+//      if (obstacleNearby) {
+//        return "clear"
+//      }
+//
+//      // 2. Try to find a free direction to move
+//      val blockedDirs = things.flatMap { t =>
+//        val c = t.hcursor
+//        val tpe = c.get[String]("type").getOrElse("")
+//        val x = c.get[Int]("x").getOrElse(99)
+//        val y = c.get[Int]("y").getOrElse(99)
+//
+//        if (tpe != "entity" && tpe != "obstacle") None
+//        else {
+//          (x, y) match {
+//            case (0, -1) => Some("n")
+//            case (0, 1)  => Some("s")
+//            case (1, 0)  => Some("e")
+//            case (-1, 0) => Some("w")
+//            case _ => None
+//          }
+//        }
+//      }.toSet
+//
+//      val allDirs = Seq("n", "s", "e", "w")
+//      val freeDirs = allDirs.filterNot(blockedDirs.contains)
+//
+//      freeDirs.headOption.map(_ => "move").getOrElse("skip")
+//    }
+//
+//    def rotateDirection(current: String, rotation: String): String = {
+//      val directions = Seq("n", "e", "s", "w")
+//      val idx = directions.indexOf(current)
+//      rotation match {
+//        case "cw" => directions((idx + 1) % 4)
+//        case "ccw" => directions((idx + 3) % 4)
+//        case _ => current
+//      }
+//    }
 
 
   }

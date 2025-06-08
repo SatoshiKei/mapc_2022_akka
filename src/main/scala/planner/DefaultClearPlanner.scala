@@ -6,7 +6,7 @@ import model.{AgentAction, Coordinate, Observation}
 class DefaultClearPlanner(minEnergy: Int = 10) extends ClearPlanner {
 
   override def shouldClear(observation: Observation, direction: String): Option[AgentAction] = {
-    val rel = observation.currentPos.fromDirection(direction)
+    val rel = Coordinate.fromDirection(direction)
 
     val clearable = observation.things.find(t => {
       val abs = observation.currentPos + Coordinate(t.x, t.y)

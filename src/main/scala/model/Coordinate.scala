@@ -3,20 +3,6 @@ import scala.collection.mutable
 
 case class Coordinate(x: Int, y: Int) {
 
-  def normalize(maxWidth: Option[Int], maxHeight: Option[Int]): Coordinate = {
-    val newX = maxWidth.map(mw => ((x % mw) + mw) % mw).getOrElse(x)
-    val newY = maxHeight.map(mh => ((y % mh) + mh) % mh).getOrElse(y)
-    Coordinate(newX, newY)
-  }
-
-  def fromDirection(dir: String): Coordinate = dir match {
-    case "n" => Coordinate(0, -1)
-    case "s" => Coordinate(0, 1)
-    case "e" => Coordinate(1, 0)
-    case "w" => Coordinate(-1, 0)
-    case _   => Coordinate(0, 0) // Default or invalid direction
-  }
-
   def move(directions: List[String]): Coordinate = {
     directions.foldLeft(this) { case (coord, dir) =>
       dir match {
@@ -65,13 +51,19 @@ case class Coordinate(x: Int, y: Int) {
     }
   }
 
-
-  def rotateToFacing(facing: String): Coordinate = facing match {
-    case "n" => this
-    case "e" => Coordinate(-y, x)
-    case "s" => Coordinate(-x, -y)
-    case "w" => Coordinate(y, -x)
+  def rotateCoordinate(rotation: String): Coordinate = rotation match {
+    case "cw"  => Coordinate(-y, x)
+    case "ccw" => Coordinate(y, -x)
+    case _     => Coordinate(x, y)
   }
+
+
+//  def rotateToFacing(facing: String): Coordinate = facing match {
+//    case "n" => this
+//    case "e" => Coordinate(-y, x)
+//    case "s" => Coordinate(-x, -y)
+//    case "w" => Coordinate(y, -x)
+//  }
 
   def getOrderedPerpendiculars: (Coordinate, Coordinate) = this match {
     case Coordinate(0, -1) => (Coordinate(-1, 0), Coordinate(1, 0)) // Facing north: left=w, right=e
@@ -121,26 +113,22 @@ case class Coordinate(x: Int, y: Int) {
     dx + dy == 1
   }
 
-  def euclideanDistance(other: Coordinate): Double =
-    math.hypot(x - other.x, y - other.y)
-
-  def chebyshevDistance(other: Coordinate): Int =
-    math.max(math.abs(x - other.x), math.abs(y - other.y))
-
   def *(scalar: Int): Coordinate = Coordinate(x * scalar, y * scalar)
 
 
   override def toString: String = s"($x, $y)"
 }
 
-//object Coordinate {
-//  val Origo: Coordinate = Coordinate(0, 0)
-//
-//  def fromTuple(t: (Int, Int)): Coordinate = Coordinate(t._1, t._2)
-//
-//  def relativeOffset(from: Coordinate, to: Coordinate): Coordinate =
-//    Coordinate(to.x - from.x, to.y - from.y)
-//
-//}
+object Coordinate {
+
+  def fromDirection(dir: String): Coordinate = dir match {
+    case "n" => Coordinate(0, -1)
+    case "s" => Coordinate(0, 1)
+    case "e" => Coordinate(1, 0)
+    case "w" => Coordinate(-1, 0)
+    case _   => Coordinate(0, 0)
+  }
+
+}
 
 

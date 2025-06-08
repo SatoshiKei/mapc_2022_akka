@@ -15,7 +15,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     if (observation.things.count(t => t.x == 0 && t.y == 0) > 1) {
       val directions = List("n", "e", "s", "w")
       val moveOption = directions.find { dir =>
-        val targetCoord = observation.currentPos.fromDirection(dir)
+        val targetCoord = Coordinate.fromDirection(dir)
         observation.getTileType(targetCoord).forall(v => !Set("block", "obstacle", "entity", "dispenser").contains(v))
       }
 
@@ -32,12 +32,13 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     println(observation.agentId + " is finding a path from " + observation.currentPos + " to " + target)
     findPath(observation.globalMap, observation.currentPos, target, observation.visionRadius) match {
       case Right(nextCoord: Coordinate) =>
+        println(observation.agentId + " found a path starting with " + nextCoord)
         val direction = observation.currentPos.toDirection(nextCoord)
         direction match {
           case Some(desiredDir) =>
             // Step A: Rotate if carrying a block and not oriented to drag it correctly
             if (observation.attached.nonEmpty) {
-              handleMoveWhileCarying(observation, nextCoord) match {
+              computeMovementWithBlock(observation, nextCoord) match {
                 case Some(action: AgentAction) =>
                   return action
                 case _ =>
@@ -62,6 +63,78 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     }
   }
 
+  def computeMovementWithBlock(
+                                observation: Observation,
+                                target: Coordinate
+                              ): Option[AgentAction] = {
+    val directionOpt = observation.currentPos.toDirection(target)
+    if (directionOpt.isEmpty) return None
+    val direction = directionOpt.get
+
+    val blockRel = observation.attached.head
+    val moveVector = target - observation.currentPos
+    val blockAbs = observation.currentPos + blockRel
+    val futureBlock = target + blockRel
+
+    val blockIsBehind = blockRel == Coordinate(-moveVector.x, -moveVector.y)
+    val targetOk = observation.isEmpty(target) || target == blockAbs
+    val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos
+
+    if (blockIsBehind && targetOk && blockOk) {
+      return Some(MoveAction(direction))
+    }
+
+    if (!targetOk && observation.isClearable(target)) {
+      return Some(ClearAction(observation.currentPos.toRelative(target)))
+    }
+
+    tryRotationThatEnablesMovement(observation, blockRel, moveVector, target)
+      .orElse(tryClearingForRotation(observation, blockRel))
+  }
+
+
+  def tryRotationThatEnablesMovement(
+                                      observation: Observation,
+                                      blockRel: Coordinate,
+                                      moveVector: Coordinate,
+                                      target: Coordinate
+                                    ): Option[AgentAction] = {
+    val direction = observation.currentPos.toDirection(target).get
+    val rotations = List("cw", "ccw")
+
+    rotations.find { rot =>
+      val rotatedRel = blockRel.rotateCoordinate(rot)
+      val rotatedAbs = observation.currentPos + rotatedRel
+
+      if (observation.isEmpty(rotatedAbs)) {
+        val futureBlock = target + rotatedRel
+        val targetOk = observation.isEmpty(target) || target == (observation.currentPos + rotatedRel)
+        val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos
+        val blockWouldBeBehind = rotatedRel == Coordinate(-moveVector.x, -moveVector.y)
+
+        targetOk && blockOk && blockWouldBeBehind
+      } else false
+    }.map(RotateAction(_))
+  }
+
+
+  def tryClearingForRotation(
+                              observation: Observation,
+                              blockRel: Coordinate
+                            ): Option[AgentAction] = {
+    val rotations = List("cw", "ccw")
+    rotations.find { rot =>
+      val rotatedRel = blockRel.rotateCoordinate(rot)
+      val rotatedAbs = observation.currentPos + rotatedRel
+      observation.isClearable(rotatedAbs)
+    }.map { rot =>
+      val rotatedRel = blockRel.rotateCoordinate(rot)
+      ClearAction(observation.currentPos.toRelative(observation.currentPos + rotatedRel))
+    }
+  }
+
+
+
   def getCleanOrDodgeAction(observation: Observation, direction: String, target: Coordinate) = {
     clearPlanner.shouldClear(observation, direction) match {
       case Some(clearAction) => clearAction
@@ -76,7 +149,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
   def findDodgeDirection(obs: Observation): Option[String] = {
     List("n", "e", "s", "w").find { dir =>
-      val coord = obs.currentPos.fromDirection(dir) + obs.currentPos
+      val coord = Coordinate.fromDirection(dir) + obs.currentPos
       println(obs.agentId + " is trying to dodge an unclearable obstacle by going to " + coord)
       obs.globalMap.get(coord).forall(v => v.`type` == "empty" || v.`type` == "unknown")
     }
@@ -163,7 +236,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
       if (current == goal) return Right(reconstructFirstStep(cameFrom, current, start).get)
 
-      for (n <- current.neighbors(1, includeDiagonals = false) if isPassable(map, n)) {
+      for (n <- current.neighbors(1, includeDiagonals = false) if canMoveOrClear(map, n)) {
 
         val blocked = map.get(n).exists(v => Set("obstacle", "block").contains(v.`type`))
         val tentative = gScore(current) + 1
@@ -215,8 +288,8 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
   private def heuristic(a: Coordinate, b: Coordinate): Int =
     math.abs(a.x - b.x) + math.abs(a.y - b.y)
 
-  private def isPassable(map: mutable.Map[Coordinate, Thing], coord: Coordinate): Boolean =
-    map.get(coord).map(_.`type`).forall(v => !Set("entity", "dispenser").contains(v))
+  private def canMoveOrClear(map: mutable.Map[Coordinate, Thing], target: Coordinate): Boolean =
+    map.get(target).map(_.`type`).forall(v => !Set("entity", "dispenser").contains(v))
 
 
 }

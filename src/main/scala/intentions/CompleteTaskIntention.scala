@@ -37,7 +37,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     // Step 1: Find the first attachable block from the task plan (adjacent-only)
     val immediateRequirement = task.requirements.find { req =>
       val rel = req.coordinate
-      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel) && !observation.isBlockAttachedAt(rel, req.`type`)
+      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel) && observation.attached.isEmpty //TO DO - It should check positions somehow
     }
 
     val countImmediateRequirements = task.requirements.count { req =>
@@ -47,7 +47,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
 
     // Step 2: If no adjacent block found, fallback to Explore for now
     if (immediateRequirement.isEmpty || observation.attached.size == countImmediateRequirements) {
-      println(s"${observation.agentId} found no immediate attachable block for ${task.name}")
+      println(s"${observation.agentId} found no immediate attachable block for ${task.name} from a total of ${immediateRequirement} requirements")
       if (!subIntention.exists(_.isInstanceOf[ExploreIntention])) subIntention = Some(new ExploreIntention())
       return subIntention.get.planNextAction(observation)
     }

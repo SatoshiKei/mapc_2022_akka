@@ -4,7 +4,6 @@ import scala.collection.mutable
 case class Observation(
                         agentId: String,
                         currentPos: Coordinate,
-                        orientation: String,
                         energy: Int,
                         things: Vector[Thing],
                         attached: Vector[Coordinate],
@@ -35,10 +34,6 @@ case class Observation(
     for (thing <- things) {
       val relative = Coordinate(thing.x, thing.y)
       val absolute = currentPos + relative
-      val encodedValue = thing.`type` match {
-        case "block" | "dispenser" | "entity" => s"${thing.`type`}:${thing.details}"
-        case other => other
-      }
       globalMap.update(absolute, thing)
     }
 
@@ -111,26 +106,45 @@ case class Observation(
     Coordinate( - dx,  - dy)
   }
 
+  def canMove(direction: String, currentPos: Coordinate, attached: Seq[Coordinate], globalMap: mutable.Map[Coordinate, Thing]): Boolean = {
+    val targetCoord = Coordinate.fromDirection(direction) + currentPos
 
-
-  def findClosestUnknownInMap(maxDistance: Int = 20): Option[Coordinate] = {
-    val visited = scala.collection.mutable.Set[Coordinate]()
-    val queue = scala.collection.mutable.Queue[(Coordinate, Int)]()
-
-    queue.enqueue((currentPos, 0))
-    visited.add(currentPos)
-
-    while (queue.nonEmpty) {
-      val (coord, dist) = queue.dequeue()
-      if (dist > maxDistance) return None
-      if (!globalMap.contains(coord)) return Some(coord)
-      for (n <- coord.neighbors() if !visited.contains(n)) {
-        visited.add(n)
-        queue.enqueue((n, dist + 1))
-      }
+    if (attached.isEmpty) {
+      // No block attached: just check the destination tile
+      return globalMap.get(targetCoord).forall(_.`type` == "empty")
     }
-    None
+
+    val blockRel = attached.head
+    val newBlockCoord = targetCoord + blockRel
+
+    val targetTileIsEmpty = globalMap.get(targetCoord).forall(_.`type` == "empty")
+    val blockTileIsEmpty = globalMap.get(newBlockCoord).forall(_.`type` == "empty")
+
+    targetTileIsEmpty && blockTileIsEmpty
   }
+
+
+
+
+
+//  def findClosestUnknownInMap(maxDistance: Int = 20): Option[Coordinate] = {
+//    val visited = scala.collection.mutable.Set[Coordinate]()
+//    val queue = scala.collection.mutable.Queue[(Coordinate, Int)]()
+//
+//    queue.enqueue((currentPos, 0))
+//    visited.add(currentPos)
+//
+//    while (queue.nonEmpty) {
+//      val (coord, dist) = queue.dequeue()
+//      if (dist > maxDistance) return None
+//      if (!globalMap.contains(coord)) return Some(coord)
+//      for (n <- coord.neighbors() if !visited.contains(n)) {
+//        visited.add(n)
+//        queue.enqueue((n, dist + 1))
+//      }
+//    }
+//    None
+//  }
 
   def findClosestUnknownFromStartingLocation(startCoordinate: Coordinate, currentCoordinate: Coordinate, vision: Int): Option[Coordinate] = {
 
@@ -239,29 +253,16 @@ case class Observation(
     }
   }
 
-  def getClosestFreeGoalZoneForTask(
-                                     currentPos: Coordinate,
-                                     blockRelCoords: Seq[Coordinate],
-                                     goalZones: Set[Coordinate],
-                                     globalMap: mutable.Map[Coordinate, String]
-                                   ): Option[Coordinate] = {
-    val occupied = Set("agent", "block", "marker", "dispenser")
-
-    def isZoneFree(center: Coordinate): Boolean = {
-      val absoluteCoords = blockRelCoords.map(center + _)
-      val surrounding = absoluteCoords.flatMap(_.neighbors(includeDiagonals = false))
-      val allToCheck = Seq(center) ++ absoluteCoords ++ surrounding
-
-      allToCheck.forall(c => globalMap.get(c).forall(v => !occupied.contains(v)))
-    }
-
-    goalZones
-      .filter(isZoneFree)
-      .toSeq
-      .sortBy(_.distanceTo(currentPos))
-      .headOption
+  def isEmpty(coord: Coordinate): Boolean = {
+    getTileType(coord).contains("empty")
   }
 
+  def isClearable(coord: Coordinate): Boolean = {
+    val clearable = Set("block", "obstacle")
+    val rel = coord - currentPos
+    val adjacent = Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0))
+    getTileType(coord).exists(clearable.contains) && adjacent.contains(rel)
+  }
 
 
 
