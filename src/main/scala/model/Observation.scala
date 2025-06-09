@@ -1,4 +1,6 @@
 package model
+import shared.KnownAgent
+
 import scala.collection.mutable
 
 case class Observation(
@@ -12,7 +14,9 @@ case class Observation(
                         globalMap: mutable.Map[Coordinate, Thing],
                         goalZones: Set[Coordinate],
                         knownGoalZones: mutable.Map[Coordinate, Zone],
-                        knownRoleZones: mutable.Map[Coordinate, Zone]
+                        knownRoleZones: mutable.Map[Coordinate, Zone],
+                        taskStatus: mutable.Map[String, TaskAssemblyStatus] = mutable.Map.empty,
+                        knownAgents: mutable.Map[String, KnownAgent] = mutable.Map.empty
                       ) {
 
   def getBlockedDirections: Set[String] = {
@@ -78,6 +82,11 @@ case class Observation(
 
   def isUnknown(coord: Coordinate): Boolean = {
     !globalMap.contains(coord)
+  }
+
+  def getRemoteCoordinate(shared: SharedCoordinate) = {
+    val offset = knownAgents(shared.system).offset
+    Coordinate(shared.x + offset.x, shared.y + offset.y)
   }
 
   def isBlockAttachedAt(position: Coordinate, blockType: String): Boolean = {

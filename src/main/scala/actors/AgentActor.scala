@@ -9,7 +9,7 @@ package actors {
   import io.circe.parser._
   import io.circe.syntax._
   import io.circe.generic.auto._
-  import model.{AgentAction, Coordinate, Observation, Role, Thing, Zone}
+  import model.{AgentAction, Coordinate, Observation, Role, TaskAssemblyStatus, Thing, Zone, Task}
   import shared.{CoordinateAlignment, KnownAgent, MapMerger, ShareMap, WhoIsHere}
 
   import scala.collection.mutable
@@ -26,20 +26,18 @@ package actors {
 
     var observation: Option[Observation] = None
     var intentionHandler: IntentionHandler = new IntentionHandler()
-    var currentAction: Option[AgentAction] = None
-    var globalReservedRoles: Map[String, Role] = Map.empty
     var globalPosition: Coordinate = Coordinate(0, 0)
-    val targetPosition: Coordinate = Coordinate(0, 0)
     var globalMap: mutable.Map[Coordinate, Thing] = mutable.Map.empty
     var knownGoalZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
     var knownRoleZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
-    //var orientation: String = "n"
     var currentRole: String = "std"
     var allRoles: Vector[Role] = Vector()
     var team: String = ""
     var teamSize: Int = 0
     var currentStep: Int = 0
     val knownAgents: mutable.Map[String, KnownAgent] = mutable.Map.empty
+    var knownTasks: mutable.Map[String, Task] = mutable.Map.empty
+    var taskStatus: mutable.Map[String, TaskAssemblyStatus] = mutable.Map.empty
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -69,6 +67,9 @@ package actors {
 
       case mapShare: ShareMap =>
         handleMapShare(mapShare)
+
+      case taskAssemblyStatus: TaskAssemblyStatus =>
+        handleAssemblyStatusUpdate(taskAssemblyStatus)
 
     }
 
@@ -128,6 +129,11 @@ package actors {
 
               println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
               val action = handleActionRequest(json)
+
+              for ((_, status) <- taskStatus) {
+                broadcastTaskStatusUpdate(status)
+              }
+
               println(agentName + " is sending action: " + action.noSpaces)
               sendMessage(action)
             case "sim-end" =>
@@ -277,15 +283,49 @@ package actors {
       }
     }
 
+    def handleAssemblyStatusUpdate(remote: TaskAssemblyStatus): Unit = {
 
-    //    def handleActionRequest(json: Json) = {
-//      val observation = createObservation(json)
-//      this.lastObservation = observation
-//      val step = observation.simulation.getSimulationStep
-//      observation.updateKnownMap()
-//      broadcastWhoIsHere(step, observation)
-//      // ... rest of planning ...
-//    }
+
+      val taskId = remote.taskId
+      val localOpt = taskStatus.get(taskId)
+      val totalRequired = knownTasks.get(remote.taskId).map(_.requirements.size).getOrElse(0)
+      println(agentName + " received a task status update for " + remote.taskId + " with " + totalRequired + " requirements")
+
+
+      val merged = localOpt match {
+        case Some(local) => local.mergeWith(remote, totalRequired)
+        case None => remote
+      }
+      println(agentName + " merge result: " + merged)
+      taskStatus.update(taskId, merged)
+    }
+
+    def broadcastTaskStatusUpdate(status: TaskAssemblyStatus): Unit = {
+      val totalRequired = knownTasks.get(status.taskId).map(_.requirements.size).getOrElse(0)
+
+      val allAgentsToInform =
+        if (shouldBroadcastToAll(status, totalRequired)) {
+          getAllAgents().filterNot(_ == agentName)
+        } else {
+          status.assemblies.flatMap(a => a.committedAgents ).toSet
+        }
+      println(agentName + " is broadcasting to " + allAgentsToInform + " | " + status + " | " + getAllAgents() + " | " + shouldBroadcastToAll(status, totalRequired))
+      allAgentsToInform.foreach { agentId =>
+        context.actorSelection(s"/user/$agentId") ! status
+      }
+    }
+
+    def shouldBroadcastToAll(status: TaskAssemblyStatus, totalRequired: Int): Boolean = {
+      status.assemblies.exists { a =>
+        val totalParticipants = a.committedAgents.size + 1
+        totalParticipants < totalRequired
+      }
+    }
+
+    def getAllAgents(): Iterable[String] = {
+      (1 to teamSize).map(i => s"agent$team$i")
+    }
+
 
     def createObservation(json: Json): Observation = {
       val cursor = json.hcursor
@@ -314,6 +354,9 @@ package actors {
       this.currentStep = step
 
       val tasks = percept.get[Vector[Task]]("tasks").getOrElse(Vector())
+      tasks.foreach(t => {
+        knownTasks.update(t.name, t)
+      })
 //      println("Tasks: " + tasks)
 
 
@@ -383,7 +426,8 @@ package actors {
         simulation = sim,
         goalZones = goalZones,
         knownGoalZones = knownGoalZones,
-        knownRoleZones = knownRoleZones
+        knownRoleZones = knownRoleZones,
+        knownAgents = knownAgents
       )
     }
 
@@ -406,6 +450,7 @@ package actors {
 
       // Update global map from observation
       globalMap = observation.globalMap
+      taskStatus = observation.taskStatus
 //      println(agentName + " Map: " + globalMap)
 
       Json.obj(

@@ -34,29 +34,45 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
   override def planNextAction(observation: Observation): AgentAction = {
     if (checkFinished(observation)) return SkipAction()
 
-    // Step 1: Find the first attachable block from the task plan (adjacent-only)
-    val immediateRequirement = task.requirements.find { req =>
-      val rel = req.coordinate
-      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel) && observation.attached.isEmpty //TO DO - It should check positions somehow
+
+
+    // Step 0: Get the TaskAssemblyStatus (and commit if needed)
+    val status = getOrInitTask(observation)
+    val assembly: TaskAssembly = status.getAssembly(observation.agentId) match {
+      case Some(value) =>
+        value
+      case None =>
+        println(observation.agentId + " fails as there was no task assembly ready at CompleteTaskIntention")
+        return SkipAction()
     }
 
-    val countImmediateRequirements = task.requirements.count { req =>
-      val rel = req.coordinate
-      Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0)).contains(rel)
+    // Step 1: Find all attachable requirement coordinates
+    val attachableOffsets = Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0))
+
+    val candidateAssignments = task.requirements.filter { req =>
+      attachableOffsets.contains(req.coordinate)
+    }
+
+    // Step 2: Try to pick one assigned to this agent, or unassigned
+    val requirement = candidateAssignments.find { req =>
+      assembly.blockAssignments.get(req.coordinate) match {
+        case Some((assignedType, assignedAgent)) => assignedAgent == observation.agentId
+        case None => true
+      }
     }
 
     // Step 2: If no adjacent block found, fallback to Explore for now
-    if (immediateRequirement.isEmpty || observation.attached.size == countImmediateRequirements) {
-      println(s"${observation.agentId} found no immediate attachable block for ${task.name} from a total of ${immediateRequirement} requirements")
+    if (requirement.isEmpty ) {
+      println(s"${observation.agentId} found no immediate attachable block for ${task.name}")
       if (!subIntention.exists(_.isInstanceOf[ExploreIntention])) subIntention = Some(new ExploreIntention())
       return subIntention.get.planNextAction(observation)
     }
 
     // Step 3: Delegate to AttachFirstBlockIntention for the correct block type
-    val blockType = immediateRequirement.get.`type`
-    if ((subIntention.isEmpty || !subIntention.get.isInstanceOf[AttachFirstBlockIntention]) && observation.attached.size < countImmediateRequirements) {
-      println(observation.agentId + " is pursuing immediate requirement " + observation.attached.size + 1 + " of " + countImmediateRequirements)
-      subIntention = Some(new AttachFirstBlockIntention(blockType, immediateRequirement.get.coordinate))
+    val blockType = requirement.get.`type`
+    if ((subIntention.isEmpty || !subIntention.get.isInstanceOf[AttachFirstBlockIntention]) && observation.attached.isEmpty) {
+      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.committedAgents + " as helpers")
+      subIntention = Some(new AttachFirstBlockIntention(blockType, requirement.get.coordinate))
     }
 
     //Step 5: Deliver the task
@@ -87,77 +103,58 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     }
   }
 
+  private def getOrInitTask(observation: Observation): TaskAssemblyStatus = {
+    val taskId = task.name
+    val agentId = observation.agentId
+    val requiredBlocks = task.requirements.size
+    val step = observation.simulation.getSimulationStep
 
-  //  override def planNextAction(observation: Observation): AgentAction = {
-//    // Step 0: Check if the correct role is adopted
-//    val maybeReservedRole = observation.simulation.getReservedRoles().get(observation.agentId).map(_.name)
-//    val currentRole = observation.currentRole
-//
-//    val roleMismatch = maybeReservedRole.exists(reserved => !currentRole.contains(reserved))
-//    if (roleMismatch) {
-//      if (!subIntention.exists(_.isInstanceOf[AdoptRoleIntention])) {
-//        subIntention = Some(new AdoptRoleIntention(maybeReservedRole.get))
-//      }
-//      return subIntention.get.planNextAction(observation)
-//    }
-//
-//    // Step 1: Filter out already satisfied blocks
-//    val remaining = blockPlan.filterNot { case (relCoord, blockType) =>
-//      observation.attached.exists { attachedCoord =>
-//        attachedCoord == relCoord && observation.globalMap.get(attachedCoord).contains(blockType)
-//      }
-//    }
-//
-//    // Step 2: If done, submit
-//    if (remaining.isEmpty) {
-//      // Step 2a: Go to goal zone
-//      if (observation.currentPos != goalZone) {
-//        if (!subIntention.exists(_.isInstanceOf[TravelIntention])) {
-//          subIntention = Some(new TravelIntention(goalZone))
-//        }
-//        return subIntention.get.planNextAction(observation)
-//      }
-//
-//      // Step 2b: Check role again before submitting
-//      val submitRoleMismatch = maybeReservedRole.exists(reserved => !currentRole.contains(reserved))
-//      if (submitRoleMismatch) {
-//        if (!subIntention.exists(_.isInstanceOf[AdoptRoleIntention])) {
-//          subIntention = Some(new AdoptRoleIntention(maybeReservedRole.get))
-//        }
-//        return subIntention.get.planNextAction(observation)
-//      }
-//
-//      // Step 2c: Submit task
-//      subIntention = None
-//      return SubmitAction(task.name)
-//    }
-//
-//    // Step 3: Pick next block
-//    val (targetRelCoord, targetBlockType) = remaining.head
-//
-//    // Step 4: Collect block if not yet attached
-//    if (!observation.attached.exists(c => observation.globalMap.get(c).contains(targetBlockType))) {
-//      if (!subIntention.exists(_.isInstanceOf[AttachFirstBlockIntention])) {
-//        subIntention = Some(new AttachFirstBlockIntention(targetBlockType))
-//      }
-//      return subIntention.get.planNextAction(observation)
-//    }
-//
-//    // Step 5: Move into position to attach it at correct relCoord
-//    val desiredAbsCoord = observation.currentPos + targetRelCoord //Deprecated rotate to facing
-//    if (observation.currentPos != desiredAbsCoord) {
-//      if (!subIntention.exists(_.isInstanceOf[TravelIntention])) {
-//        subIntention = Some(new TravelIntention(desiredAbsCoord))
-//      }
-//      return subIntention.get.planNextAction(observation)
-//    }
-//
-//    // Step 6: Attach the block
-//    val attachDirection = targetRelCoord.toDirection.getOrElse("n") //Deprecated rotate to facing
-//    blockPlan = blockPlan.tail
-//    subIntention = None
-//    AttachAction(attachDirection)
-//  }
+    // Helper to create a new assembly instance
+    def createNewAssembly(): TaskAssembly = {
+      TaskAssembly(
+        goalZone = goalZone,
+        blockAssignments = Map.empty,
+        recipient = agentId,
+        committedAgents = Set.empty,
+        lastUpdated = step
+      )
+    }
+
+    // Fetch current TaskAssemblyStatus or initialize if missing
+    val currentStatus = observation.taskStatus.getOrElseUpdate(
+      taskId,
+      TaskAssemblyStatus(
+        taskId = taskId,
+        assemblies = List.empty
+      )
+    )
+
+    // Try to find a joinable assembly (not full and not already joined)
+    val maybeJoinable = currentStatus.assemblies.find { assembly =>
+      val totalParticipants = assembly.committedAgents.size + 1
+      totalParticipants < requiredBlocks && !assembly.allAgents.contains(agentId)
+    }
+
+    val updatedAssemblies = maybeJoinable match {
+      case Some(joinable) =>
+        // Join this existing assembly
+        val updated = joinable.copy(
+          committedAgents = joinable.committedAgents + agentId,
+          lastUpdated = step
+        )
+        currentStatus.assemblies.map(a => if (a == joinable) updated else a)
+
+      case None =>
+        // No room in existing assemblies, start a new one
+        currentStatus.assemblies :+ createNewAssembly()
+    }
+
+    // Store updated status
+    val updatedStatus = currentStatus.copy(assemblies = updatedAssemblies)
+    observation.taskStatus.update(taskId, updatedStatus)
+    updatedStatus
+  }
+
 
   override def checkFinished(observation: Observation): Boolean = {
     blockPlan.isEmpty

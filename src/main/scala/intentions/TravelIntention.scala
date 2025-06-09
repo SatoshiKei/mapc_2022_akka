@@ -14,6 +14,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class TravelIntention(var target: Coordinate, val planner: Planner = new PathExecutor()) extends Intention {
 
   override def planNextAction(observation: Observation): AgentAction = {
+    if (observation.currentPos == target) {
+      println(observation.agentId + " is already at " + target)
+      return SkipAction()
+    }
     planner.nextAction(observation, target)
   }
 
