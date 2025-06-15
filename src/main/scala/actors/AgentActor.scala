@@ -305,11 +305,11 @@ package actors {
 
       val allAgentsToInform =
         if (shouldBroadcastToAll(status, totalRequired)) {
-          getAllAgents().filterNot(_ == agentName)
+          knownAgents.values.toSet
         } else {
           status.assemblies.flatMap(a => a.committedAgents ).toSet
         }
-      println(agentName + " is broadcasting to " + allAgentsToInform + " | " + status + " | " + getAllAgents() + " | " + shouldBroadcastToAll(status, totalRequired))
+      println(agentName + " is broadcasting to " + allAgentsToInform + " | " + status + " | " + knownAgents + " | " + shouldBroadcastToAll(status, totalRequired))
       allAgentsToInform.foreach { agentId =>
         context.actorSelection(s"/user/$agentId") ! status
       }
@@ -320,10 +320,6 @@ package actors {
         val totalParticipants = a.committedAgents.size + 1
         totalParticipants < totalRequired
       }
-    }
-
-    def getAllAgents(): Iterable[String] = {
-      (1 to teamSize).map(i => s"agent$team$i")
     }
 
 

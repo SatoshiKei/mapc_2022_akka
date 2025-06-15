@@ -115,6 +115,33 @@ case class Observation(
     Coordinate( - dx,  - dy)
   }
 
+  def translateRemoteCoordinate(shared: SharedCoordinate): Option[Coordinate] = {
+    if (shared.system == agentId) {
+      Coordinate(shared.x, shared.y)
+    }
+    if (knownAgents.contains(shared.system)) {
+      val agent = knownAgents(shared.system)
+      Some(Coordinate(shared.x + agent.offset.x, shared.y + agent.offset.y))
+    }
+    else if (agentId == shared.system) {
+        Some(Coordinate(shared.x, shared.y))
+    } else {
+      println(agentId +  " does not know " + shared.system)
+     None
+    }
+  }
+
+  def allRequirementsMet(task: Task): Boolean = {
+    val attached: Map[Coordinate, String] = this.attached.flatMap { relCoord =>
+      globalMap.get(currentPos + relCoord).map(_.details).map(t => relCoord -> t)
+    }.toMap
+
+    task.requirements.forall { req =>
+      attached.get(Coordinate(req.coordinate.x, req.coordinate.y)).contains(req.`type`)
+    }
+  }
+
+
   def canMove(direction: String, currentPos: Coordinate, attached: Seq[Coordinate], globalMap: mutable.Map[Coordinate, Thing]): Boolean = {
     val targetCoord = Coordinate.fromDirection(direction) + currentPos
 

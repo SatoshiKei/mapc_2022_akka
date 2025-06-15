@@ -1,6 +1,6 @@
 package model
 
-case class TaskAssemblyStatus(
+case class TaskTeamRegistry(
                                taskId: String,
                                assemblies: List[TaskAssembly]
                              ) {
@@ -35,7 +35,7 @@ case class TaskAssemblyStatus(
       case (agents, i) =>
         val rec = agents.head
         val committed = agents.tail.toSet
-        val goal = Coordinate(primaryGoal.x + (i + 1), primaryGoal.y + (i + 1)) // deterministic distinct zones
+        val goal = SharedCoordinate(primaryGoal.x + (i + 1), primaryGoal.y + (i + 1), rec) // deterministic distinct zones
         TaskAssembly(
           goalZone = goal,
           recipient = rec,

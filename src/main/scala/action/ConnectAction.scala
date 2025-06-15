@@ -3,6 +3,6 @@ package action
 import model.{AgentAction, Coordinate}
 
 object ConnectAction {
-  def apply(toAgentId: String, relCoord: Coordinate, partnerOffset: Coordinate): AgentAction =
-    new AgentAction("connect", Seq(toAgentId, relCoord.x.toString, relCoord.y.toString))
+  def apply(target: String, pos: Coordinate): AgentAction =
+    new AgentAction("connect", Seq(target, pos.x.toString, pos.y.toString))
 }

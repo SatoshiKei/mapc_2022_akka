@@ -1,9 +1,10 @@
 package model
 
 case class TaskAssembly(
-                         goalZone: Coordinate,
+                         goalZone: SharedCoordinate,
                          recipient: String,
                          committedAgents: Set[String],
+                         seniority: Map[String, Int], // agentId -> step
                          blockAssignments: Map[Coordinate, (String, String)], // relPos -> (agentId, blockType)
                          lastUpdated: Int
                        ) {

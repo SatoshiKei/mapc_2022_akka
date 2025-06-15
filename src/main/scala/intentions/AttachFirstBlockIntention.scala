@@ -1,6 +1,6 @@
 package intentions
 
-import action.{AttachAction, ClearAction, RequestAction, SkipAction}
+import action.{AttachAction, ClearAction, DetachAction, RequestAction, SkipAction}
 import model._
 
 import scala.util.Random
@@ -12,6 +12,7 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
   private var roleIntention: Option[AdoptRoleIntention] = None
   private var exploreIntention: Option[ExploreIntention] = None
   private var requiredRole: Option[String] = None
+  private var requiredAction: Option[String] = None
   private var finished: Boolean = false
 
   override def explain(): String = {
@@ -19,6 +20,11 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
   }
 
   override def planNextAction(observation: Observation): AgentAction = {
+
+    //TODO - Check if range 1 attachment
+    if (observation.attached.nonEmpty && !observation.isBlockAttached(blockType)) {
+      DetachAction(Coordinate.toDirection(observation.attached.head).get)
+    }
 
     if (observation.isBlockAttached(blockType)) {
       println(observation.agentId + " is trying to complete a task that has already been completed, causing it to hault")
@@ -52,19 +58,23 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
             println(observation.agentId + "is going after block of type " + blockType + " abandoned at " + abandoned)
             targetCoord = Some(aCoord)
             requiredRole = aRole
+            requiredAction = Some("attach")
           } else {
             println(observation.agentId + "is going after block of type " + blockType + " from dispenser at " + dispenser)
             targetCoord = Some(dCoord)
             requiredRole = dRole
+            requiredAction = Some("request")
           }
         case (Some((aCoord, aRole, _)), None) =>
           println(observation.agentId + "is going after block of type " + blockType + " abandoned at " + abandoned)
           targetCoord = Some(aCoord)
           requiredRole = aRole
+          requiredAction = Some("attach")
         case (None, Some((dCoord, dRole, _))) =>
           println(observation.agentId + "is going after block of type " + blockType + " from dispenser at " + dispenser)
           targetCoord = Some(dCoord)
           requiredRole = dRole
+          requiredAction = Some("request")
         case _ =>
           println(observation.agentId + "could not find any blocks of type " + blockType)
           if (exploreIntention.isEmpty) exploreIntention = Some(new ExploreIntention())
@@ -77,7 +87,7 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
     val isAdjacent = observation.currentPos.neighbors(includeDiagonals = false).contains(target)
 
     // Step 2: Check if role needs to be adopted BEFORE moving
-    if (requiredRole.exists(role => !observation.currentRole.contains(role))) {
+    if (requiredAction.exists(action => !observation.simulation.getRolesWithAction(action).contains(observation.currentRole.getOrElse("default")))) {
       if (roleIntention.isEmpty)
         roleIntention = Some(new AdoptRoleIntention(requiredRole.get))
       return roleIntention.get.planNextAction(observation)

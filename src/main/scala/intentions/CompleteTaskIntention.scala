@@ -56,7 +56,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     // Step 2: Try to pick one assigned to this agent, or unassigned
     val requirement = candidateAssignments.find { req =>
       assembly.blockAssignments.get(req.coordinate) match {
-        case Some((assignedType, assignedAgent)) => assignedAgent == observation.agentId
+        case Some((assignedAgent, assignedType)) => assignedAgent == observation.agentId
         case None => true
       }
     }
@@ -71,24 +71,32 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     // Step 3: Delegate to AttachFirstBlockIntention for the correct block type
     val blockType = requirement.get.`type`
     if ((subIntention.isEmpty || !subIntention.get.isInstanceOf[AttachFirstBlockIntention]) && observation.attached.isEmpty) {
-      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.committedAgents + " as helpers")
+//      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.committedAgents + " as helpers")
       subIntention = Some(new AttachFirstBlockIntention(blockType, requirement.get.coordinate))
     }
 
+    if (subIntention.nonEmpty && subIntention.get.isInstanceOf[AttachFirstBlockIntention]) {
+      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.committedAgents + " as helpers")
+    }
+
     //Step 5: Deliver the task
-    if (observation.attached.size == task.requirements.size) {
+    if (observation.attached.size == 1) {
 
       if (!observation.simulation.getRolesWithAction("submit").contains(observation.currentRole.getOrElse("standard"))) {
         println(observation.agentId + " is looking for role to submit task")
         subIntention = Some(new AdoptRoleIntention(observation.simulation.getRolesWithAction("submit").headOption.get))
       } else {
-        //TODO - Goal Zones can change, calculate them dynamically
-        //val goalZoneOpt = observation.getKnownGoalZones.minByOption(_.distanceTo(observation.currentPos))
-        if (observation.currentPos == goalZone) {
-          SubmitAction(task.name)
+        val goal = observation.translateRemoteCoordinate(assembly.goalZone).getOrElse(goalZone)
+        if (observation.currentPos == goal) {
+          val allRequirementsMet = observation.allRequirementsMet(task)
+          if (allRequirementsMet) {
+            SubmitAction(task.name)
+          } else {
+            subIntention = Some(new ConnectBlocksIntention(task, goalZone))
+          }
         } else {
-          println(observation.agentId + "is traveling to a goal zone at " + goalZone)
-          subIntention = Some(new TravelIntention(goalZone))
+          println(observation.agentId + "is traveling to a goal zone at " + goal)
+          subIntention = Some(new TravelIntention(goal))
         }
       }
 
@@ -112,7 +120,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     // Helper to create a new assembly instance
     def createNewAssembly(): TaskAssembly = {
       TaskAssembly(
-        goalZone = goalZone,
+        goalZone = SharedCoordinate(goalZone.x, goalZone.y, observation.agentId),
         blockAssignments = Map.empty,
         recipient = agentId,
         committedAgents = Set.empty,
@@ -154,6 +162,10 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     observation.taskStatus.update(taskId, updatedStatus)
     updatedStatus
   }
+
+
+
+
 
 
   override def checkFinished(observation: Observation): Boolean = {

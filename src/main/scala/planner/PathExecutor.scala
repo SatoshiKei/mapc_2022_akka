@@ -32,12 +32,13 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     println(observation.agentId + " is finding a path from " + observation.currentPos + " to " + target)
     findPath(observation.globalMap, observation.currentPos, target, observation.visionRadius) match {
       case Right(nextCoord: Coordinate) =>
-        println(observation.agentId + " found a path starting with " + nextCoord)
+        println(observation.agentId + " found a path from " + observation.currentPos + " to " + nextCoord)
         val direction = observation.currentPos.toDirection(nextCoord)
         direction match {
           case Some(desiredDir) =>
             // Step A: Rotate if carrying a block and not oriented to drag it correctly
             if (observation.attached.nonEmpty) {
+              println(observation.agentId + " has an attached block at " + observation.attached.head)
               computeMovementWithBlock(observation, nextCoord) match {
                 case Some(action: AgentAction) =>
                   return action
@@ -65,22 +66,22 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
   def computeMovementWithBlock(
                                 observation: Observation,
-                                target: Coordinate
+                                target: Coordinate // (-3, -2)
                               ): Option[AgentAction] = {
-    val directionOpt = observation.currentPos.toDirection(target)
+    val directionOpt = observation.currentPos.toDirection(target) // e
     if (directionOpt.isEmpty) return None
     val direction = directionOpt.get
 
-    val blockRel = observation.attached.head
-    val moveVector = target - observation.currentPos
-    val blockAbs = observation.currentPos + blockRel
-    val futureBlock = target + blockRel
+    val blockRel = observation.attached.head // (0, 1)
+    val moveVector = target - observation.currentPos //(-1, 0)
+    val blockAbs = observation.currentPos + blockRel // (-2,-2) + (0, 1) = (-2, -1)
+    val futureBlock = target + blockRel // (-3, -2) + (0, 1) = (-3, -1)
 
-    val blockIsBehind = blockRel == Coordinate(-moveVector.x, -moveVector.y)
-    val targetOk = observation.isEmpty(target) || target == blockAbs
-    val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos
+    val blockIsBehind = blockRel == Coordinate(-moveVector.x, -moveVector.y) //false
+    val targetOk = observation.isEmpty(target) || target == blockAbs //true
+    val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos //false
 
-    if (blockIsBehind && targetOk && blockOk) {
+    if (targetOk && blockOk) {
       return Some(MoveAction(direction))
     }
 
@@ -95,24 +96,22 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
 
   def tryRotationThatEnablesMovement(
                                       observation: Observation,
-                                      blockRel: Coordinate,
-                                      moveVector: Coordinate,
-                                      target: Coordinate
+                                      blockRel: Coordinate, //(0, 1)
+                                      moveVector: Coordinate, //(1, 0)
+                                      target: Coordinate //(-6, -12)
                                     ): Option[AgentAction] = {
-    val direction = observation.currentPos.toDirection(target).get
     val rotations = List("cw", "ccw")
 
     rotations.find { rot =>
-      val rotatedRel = blockRel.rotateCoordinate(rot)
-      val rotatedAbs = observation.currentPos + rotatedRel
-
+      val rotatedRel = blockRel.rotateCoordinate(rot) // (0, 1) ccw -> (1, 0)
+      val rotatedAbs = observation.currentPos + rotatedRel // (-7, -12) + (1,0) = (-6, -12)
       if (observation.isEmpty(rotatedAbs)) {
-        val futureBlock = target + rotatedRel
-        val targetOk = observation.isEmpty(target) || target == (observation.currentPos + rotatedRel)
+        val futureBlock = observation.currentPos + rotatedRel + moveVector // (-7, -12) + (1, 0) + (1, 0) = (-5, -12)
+        val targetOk = observation.isEmpty(target) || target == (observation.currentPos + moveVector) // true
         val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos
-        val blockWouldBeBehind = rotatedRel == Coordinate(-moveVector.x, -moveVector.y)
+        //val blockWouldBeBehind = rotatedRel == Coordinate(-moveVector.x, -moveVector.y) // (1, 0) == (0, 1)
 
-        targetOk && blockOk && blockWouldBeBehind
+        targetOk && blockOk
       } else false
     }.map(RotateAction(_))
   }
@@ -154,67 +153,6 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       obs.globalMap.get(coord).forall(v => v.`type` == "empty" || v.`type` == "unknown")
     }
   }
-
-  def handleMoveWhileCarying(observation: Observation, target: Coordinate): Option[AgentAction] = {
-    actionToDragBlockBehind(observation, target)
-  }
-
-  def actionToDragBlockBehind(observation: Observation, target: Coordinate): Option[AgentAction] = {
-    if (observation.attached.isEmpty) return None
-
-    val behind = observation.behind(target)
-    val block = observation.attached.head
-
-    println(observation.agentId + " at " + observation.currentPos +  " is carrying a block at " + block + " and pretends to go to target " + target + " after rotating behind " + behind)
-
-    val rotation = (block, behind) match {
-      case (b, e) if b == e =>
-        println(observation.agentId + " is already behind — no rotation needed")
-        None
-      case (Coordinate(x, y), Coordinate(x2, y2)) if x == -x2 && y == -y2 =>
-        println(observation.agentId +" is opposite to behind — needs 180° rotation")
-        Some("180")
-      case (Coordinate(x, y), Coordinate(x2, y2)) if math.abs(x - x2) == math.abs(y + y2) =>
-        println(observation.agentId + " is perpendicular to behind — needs one rotation")
-        Some("90")
-      case _ =>
-        println(observation.agentId + " could not find a valid rotation")
-        None
-    }
-
-    val absBehind = observation.currentPos + behind
-
-    rotation match {
-      case Some("90") =>
-        observation.getTileType(absBehind) match {
-          case Some("empty") =>
-            Some(RotateAction("cw"))
-          case _ =>
-            val direction = observation.currentPos.toDirection(absBehind).get //TODO - This could be NONE
-            Some(getCleanOrDodgeAction(observation, direction, absBehind))
-        }
-      case Some("180") =>
-        val (left, right) = target.getOrderedPerpendiculars
-        val leftTile = observation.currentPos + left
-        val rightTile = observation.currentPos + right
-
-        val canRotateLeft = observation.getTileType(leftTile).contains("empty")
-        val canRotateRight = observation.getTileType(rightTile).contains("empty")
-
-        (canRotateLeft, canRotateRight) match {
-          case (true, false) => Some(RotateAction("ccw"))
-          case (false, true) => Some(RotateAction("cw"))
-          case (true, true)  => Some(RotateAction("cw"))
-          case _ =>
-            val direction = observation.currentPos.toDirection(leftTile).get //TODO - This could be NONE : but how? It should always be within map range
-            Some(getCleanOrDodgeAction(observation, direction, leftTile))
-        }
-      case None =>
-        None
-    }
-  }
-
-
 
 
   private def findPath(

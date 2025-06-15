@@ -129,6 +129,14 @@ object Coordinate {
     case _   => Coordinate(0, 0)
   }
 
+  def toDirection(target: Coordinate): Option[String] = target match {
+    case Coordinate(0, -1) => Some("n")
+    case Coordinate(0, 1) => Some("s")
+    case Coordinate(1, 0) => Some("e")
+    case Coordinate(-1, 0) => Some("w")
+    case _ => None
+  }
+
 }
 
 
