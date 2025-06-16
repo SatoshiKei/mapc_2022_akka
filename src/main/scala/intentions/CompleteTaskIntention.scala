@@ -37,8 +37,8 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
 
 
     // Step 0: Get the TaskAssemblyStatus (and commit if needed)
-    val status = getOrInitTask(observation)
-    val assembly: TaskAssembly = status.getAssembly(observation.agentId) match {
+    val registry = getOrInitTask(observation)
+    val assembly: TaskAssembly = registry.getAssembly(observation.agentId) match {
       case Some(value) =>
         value
       case None =>
@@ -55,11 +55,14 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
 
     // Step 2: Try to pick one assigned to this agent, or unassigned
     val requirement = candidateAssignments.find { req =>
-      assembly.blockAssignments.get(req.coordinate) match {
-        case Some((assignedAgent, assignedType)) => assignedAgent == observation.agentId
-        case None => true
+      val matchingAssignmentOpt = assembly.participantAssignments.find(_.coordinate == req.coordinate)
+
+      matchingAssignmentOpt match {
+        case Some(assignment) => assignment.name == observation.agentId
+        case None => true // unassigned, we can take it
       }
     }
+
 
     // Step 2: If no adjacent block found, fallback to Explore for now
     if (requirement.isEmpty ) {
@@ -75,8 +78,8 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
       subIntention = Some(new AttachFirstBlockIntention(blockType, requirement.get.coordinate))
     }
 
-    if (subIntention.nonEmpty && subIntention.get.isInstanceOf[AttachFirstBlockIntention]) {
-      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.committedAgents + " as helpers")
+    if (assembly != null) {
+      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.supporters + " as supporters")
     }
 
     //Step 5: Deliver the task
@@ -111,55 +114,54 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     }
   }
 
-  private def getOrInitTask(observation: Observation): TaskAssemblyStatus = {
+  private def getOrInitTask(observation: Observation): TaskTeamRegistry = {
     val taskId = task.name
     val agentId = observation.agentId
     val requiredBlocks = task.requirements.size
     val step = observation.simulation.getSimulationStep
 
-    // Helper to create a new assembly instance
+    val newParticipant = Participant(agentId, step)
+
     def createNewAssembly(): TaskAssembly = {
+      println(observation.agentId + " is creating a new assembly at " + observation.simulation.getSimulationStep)
+      val goal = SharedCoordinate(goalZone.x, goalZone.y, agentId)
       TaskAssembly(
-        goalZone = SharedCoordinate(goalZone.x, goalZone.y, observation.agentId),
-        blockAssignments = Map.empty,
-        recipient = agentId,
-        committedAgents = Set.empty,
+        goalZone = goal,
+        participants = Set(newParticipant),
+        participantAssignments = Set.empty,
         lastUpdated = step
       )
     }
 
-    // Fetch current TaskAssemblyStatus or initialize if missing
-    val currentStatus = observation.taskStatus.getOrElseUpdate(
+    val currentStatus = observation.taskRegistry.getOrElseUpdate(
       taskId,
-      TaskAssemblyStatus(
-        taskId = taskId,
-        assemblies = List.empty
-      )
+      TaskTeamRegistry(taskId = taskId, assemblies = List.empty)
     )
 
-    // Try to find a joinable assembly (not full and not already joined)
-    val maybeJoinable = currentStatus.assemblies.find { assembly =>
-      val totalParticipants = assembly.committedAgents.size + 1
-      totalParticipants < requiredBlocks && !assembly.allAgents.contains(agentId)
+    // If the agent is already part of an assembly, return as-is (no update)
+    if (currentStatus.assemblies.exists(_.allAgents.contains(agentId))) {
+      return currentStatus
     }
+
+    // Try to find a joinable assembly that has space
+    val maybeJoinable = currentStatus.assemblies.find(_.participants.size < requiredBlocks)
 
     val updatedAssemblies = maybeJoinable match {
       case Some(joinable) =>
-        // Join this existing assembly
-        val updated = joinable.copy(
-          committedAgents = joinable.committedAgents + agentId,
-          lastUpdated = step
+        val updatedAssembly = joinable.copy(
+          participants = joinable.participants + newParticipant
+          // Do NOT change lastUpdated
         )
-        currentStatus.assemblies.map(a => if (a == joinable) updated else a)
+        currentStatus.assemblies.map { a =>
+          if (a == joinable) updatedAssembly else a
+        }
 
       case None =>
-        // No room in existing assemblies, start a new one
         currentStatus.assemblies :+ createNewAssembly()
     }
 
-    // Store updated status
     val updatedStatus = currentStatus.copy(assemblies = updatedAssemblies)
-    observation.taskStatus.update(taskId, updatedStatus)
+    observation.taskRegistry.update(taskId, updatedStatus)
     updatedStatus
   }
 

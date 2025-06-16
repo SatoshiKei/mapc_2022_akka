@@ -2,37 +2,27 @@ package model
 
 case class TaskAssembly(
                          goalZone: SharedCoordinate,
-                         recipient: String,
-                         committedAgents: Set[String],
-                         seniority: Map[String, Int], // agentId -> step
-                         blockAssignments: Map[Coordinate, (String, String)], // relPos -> (agentId, blockType)
+                         participants: Set[Participant],
+                         participantAssignments: Set[ParticipantAssignment],
                          lastUpdated: Int
                        ) {
 
-  def allAgents: Set[String] = {
-    committedAgents ++ Some(recipient).toSet
+  def allAgents: Set[String] = participants.map(_.name)
+
+  def recipient: String = {
+    participants.toList.sortWith { (a, b) =>
+      if (a.joinedStep != b.joinedStep) a.joinedStep < b.joinedStep
+      else extractAgentId(a.name) < extractAgentId(b.name)
+    }.head.name
   }
 
-    def mergeWith(other: TaskAssembly): TaskAssembly = {
+  def supporters: Set[String] = allAgents - recipient
 
-      val newer = if (this.lastUpdated >= other.lastUpdated) this else other
-
-      // Union of committed agents
-      val mergedCommitted = this.committedAgents ++ other.committedAgents
-
-      // Keep block assignments from the newer one
-      val mergedAssignments =
-        if (this.lastUpdated >= other.lastUpdated) this.blockAssignments
-        else other.blockAssignments
-
-      // Prefer recipient from the newer one (non-empty)
-      val mergedRecipient = Some(newer.recipient).orElse(Some(this.recipient)).orElse(Some(other.recipient))
-
-      newer.copy(
-        blockAssignments = mergedAssignments,
-        committedAgents = mergedCommitted,
-        recipient = mergedRecipient.get
-      )
+  private def extractAgentId(name: String): Int = {
+    try {
+      name.replaceAll("[^0-9]", "").toInt
+    } catch {
+      case _: NumberFormatException => Int.MaxValue
     }
-
+  }
 }

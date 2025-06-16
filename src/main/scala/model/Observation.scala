@@ -15,7 +15,7 @@ case class Observation(
                         goalZones: Set[Coordinate],
                         knownGoalZones: mutable.Map[Coordinate, Zone],
                         knownRoleZones: mutable.Map[Coordinate, Zone],
-                        taskStatus: mutable.Map[String, TaskAssemblyStatus] = mutable.Map.empty,
+                        taskRegistry: mutable.Map[String, TaskTeamRegistry] = mutable.Map.empty,
                         knownAgents: mutable.Map[String, KnownAgent] = mutable.Map.empty
                       ) {
 

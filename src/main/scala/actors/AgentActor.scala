@@ -9,7 +9,7 @@ package actors {
   import io.circe.parser._
   import io.circe.syntax._
   import io.circe.generic.auto._
-  import model.{AgentAction, Coordinate, Observation, Role, TaskAssemblyStatus, Thing, Zone, Task}
+  import model.{AgentAction, Coordinate, Observation, Role, TaskTeamRegistry, Thing, Zone, Task}
   import shared.{CoordinateAlignment, KnownAgent, MapMerger, ShareMap, WhoIsHere}
 
   import scala.collection.mutable
@@ -30,6 +30,7 @@ package actors {
     var globalMap: mutable.Map[Coordinate, Thing] = mutable.Map.empty
     var knownGoalZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
     var knownRoleZones: mutable.Map[Coordinate, Zone] = mutable.Map.empty
+    var attached: Vector[Coordinate] = Vector()
     var currentRole: String = "std"
     var allRoles: Vector[Role] = Vector()
     var team: String = ""
@@ -37,7 +38,7 @@ package actors {
     var currentStep: Int = 0
     val knownAgents: mutable.Map[String, KnownAgent] = mutable.Map.empty
     var knownTasks: mutable.Map[String, Task] = mutable.Map.empty
-    var taskStatus: mutable.Map[String, TaskAssemblyStatus] = mutable.Map.empty
+    var taskRegistry: mutable.Map[String, TaskTeamRegistry] = mutable.Map.empty
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -68,8 +69,8 @@ package actors {
       case mapShare: ShareMap =>
         handleMapShare(mapShare)
 
-      case taskAssemblyStatus: TaskAssemblyStatus =>
-        handleAssemblyStatusUpdate(taskAssemblyStatus)
+      case taskRegistry: TaskTeamRegistry =>
+        handleTaskTeamRegistryUpdate(taskRegistry)
 
     }
 
@@ -123,15 +124,27 @@ package actors {
                 globalPosition = globalPosition + Coordinate.fromDirection(lastActionParams)
               }
 
-//              if (lastAction == "rotate" && lastActionResult == "success") {
-//                orientation = rotateDirection(orientation, lastActionParams)
-//              }
+              if (lastAction == "attach" && lastActionResult == "success") {
+                val rel = Coordinate.fromDirection(lastActionParams)
+                attached = rel +: attached
+              }
+
+              if (lastAction == "detach" && lastActionResult == "success") {
+                val rel = Coordinate.fromDirection(lastActionParams)
+                attached = attached.filterNot(_ == rel)
+              }
+
+              if (lastAction == "rotate" && lastActionResult == "success") {
+                val newAttachments = attached.map(_.rotateCoordinate(lastActionParams))
+                attached = newAttachments
+              }
+
 
               println(s"Last Action: $agentName/$energy/$currentRole $globalPosition  [$lastAction/$lastActionParams -> $lastActionResult]")
               val action = handleActionRequest(json)
 
-              for ((_, status) <- taskStatus) {
-                broadcastTaskStatusUpdate(status)
+              for ((_, registry) <- taskRegistry) {
+                broadcastTaskStatusUpdate(registry)
               }
 
               println(agentName + " is sending action: " + action.noSpaces)
@@ -276,20 +289,19 @@ package actors {
             }
         }
 
-        // ✅ Log summary
-        if (totalMapUpdates > 0 || updatedGoals > 0 || updatedRoles > 0) {
-          println(s"$agentName synced map from ${msg.senderName}: $totalMapUpdates tiles, $updatedGoals goal zones, $updatedRoles role zones")
-        }
+//        if (totalMapUpdates > 0 || updatedGoals > 0 || updatedRoles > 0) {
+//          println(s"$agentName synced map from ${msg.senderName}: $totalMapUpdates tiles, $updatedGoals goal zones, $updatedRoles role zones")
+//        }
       }
     }
 
-    def handleAssemblyStatusUpdate(remote: TaskAssemblyStatus): Unit = {
+    def handleTaskTeamRegistryUpdate(remote: TaskTeamRegistry): Unit = {
 
 
       val taskId = remote.taskId
-      val localOpt = taskStatus.get(taskId)
+      val localOpt = taskRegistry.get(taskId)
       val totalRequired = knownTasks.get(remote.taskId).map(_.requirements.size).getOrElse(0)
-      println(agentName + " received a task status update for " + remote.taskId + " with " + totalRequired + " requirements")
+      println(agentName + " received a task status update for " + remote.taskId + " with " + totalRequired + " requirements at step " + this.currentStep)
 
 
       val merged = localOpt match {
@@ -297,28 +309,27 @@ package actors {
         case None => remote
       }
       println(agentName + " merge result: " + merged)
-      taskStatus.update(taskId, merged)
+      taskRegistry.update(taskId, merged)
     }
 
-    def broadcastTaskStatusUpdate(status: TaskAssemblyStatus): Unit = {
-      val totalRequired = knownTasks.get(status.taskId).map(_.requirements.size).getOrElse(0)
+    def broadcastTaskStatusUpdate(registry: TaskTeamRegistry): Unit = {
+      val totalRequired = knownTasks.get(registry.taskId).map(_.requirements.size).getOrElse(0)
 
       val allAgentsToInform =
-        if (shouldBroadcastToAll(status, totalRequired)) {
-          knownAgents.values.toSet
+        if (shouldBroadcastToAll(registry, totalRequired)) {
+          knownAgents.values.map(agent => agent.name).toSet
         } else {
-          status.assemblies.flatMap(a => a.committedAgents ).toSet
+          registry.assemblies.flatMap(a => a.supporters ).toSet
         }
-      println(agentName + " is broadcasting to " + allAgentsToInform + " | " + status + " | " + knownAgents + " | " + shouldBroadcastToAll(status, totalRequired))
+      println(agentName + " is broadcasting to " + allAgentsToInform + " | " + registry + " | " + knownAgents + " | " + shouldBroadcastToAll(registry, totalRequired))
       allAgentsToInform.foreach { agentId =>
-        context.actorSelection(s"/user/$agentId") ! status
+        context.actorSelection(s"/user/$agentId") ! registry
       }
     }
 
-    def shouldBroadcastToAll(status: TaskAssemblyStatus, totalRequired: Int): Boolean = {
-      status.assemblies.exists { a =>
-        val totalParticipants = a.committedAgents.size + 1
-        totalParticipants < totalRequired
+    def shouldBroadcastToAll(registry: TaskTeamRegistry, totalRequired: Int): Boolean = {
+      registry.assemblies.exists { a =>
+        a.allAgents.size < totalRequired
       }
     }
 
@@ -343,7 +354,7 @@ package actors {
 //      println(agentName + "'s things: " + things)
 
 
-      val attached = percept.get[Vector[(Int, Int)]]("attached").getOrElse(Vector()).map { case (x, y) => Coordinate(x, y) }
+//      val attached = percept.get[Vector[(Int, Int)]]("attached").getOrElse(Vector()).map { case (x, y) => Coordinate(x, y) }
 
 
       val step = content.get[Int]("step").getOrElse(0)
@@ -446,7 +457,7 @@ package actors {
 
       // Update global map from observation
       globalMap = observation.globalMap
-      taskStatus = observation.taskStatus
+      taskRegistry = observation.taskRegistry
 //      println(agentName + " Map: " + globalMap)
 
       Json.obj(

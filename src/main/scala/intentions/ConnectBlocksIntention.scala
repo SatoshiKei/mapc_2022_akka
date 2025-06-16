@@ -11,14 +11,14 @@ class ConnectBlocksIntention(task: Task, goalZone: Coordinate) extends Intention
   override def planNextAction(observation: Observation): AgentAction = {
     if (connectionIssued) return SkipAction()
 
-    val assembly = observation.taskStatus(task.name).getAssembly(observation.agentId).get
+    val assembly = observation.taskRegistry(task.name).getAssembly(observation.agentId).get
     val isRecipient = assembly.recipient == observation.agentId
 
     val attachedBlocks = observation.attached.map(_ + observation.currentPos)
     val neighbors = observation.knownAgents.filter {
       case (id, known) =>
         id != observation.agentId &&
-          observation.taskStatus(task.name).getAssembly(id).exists(remote => observation.translateRemoteCoordinate(remote.goalZone).get == goalZone) //TODO - NONE
+          observation.taskRegistry(task.name).getAssembly(id).exists(remote => observation.translateRemoteCoordinate(remote.goalZone).get == goalZone) //TODO - NONE
     }
 
     // Recipient waits
