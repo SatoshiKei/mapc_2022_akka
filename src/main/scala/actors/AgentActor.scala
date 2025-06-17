@@ -9,11 +9,12 @@ package actors {
   import io.circe.parser._
   import io.circe.syntax._
   import io.circe.generic.auto._
-  import model.{AgentAction, Coordinate, Observation, Role, TaskTeamRegistry, Thing, Zone, Task}
+  import model.{AgentAction, Coordinate, Observation, Role, Task, TaskTeamRegistry, Thing, Zone}
   import shared.{CoordinateAlignment, KnownAgent, MapMerger, ShareMap, WhoIsHere}
 
   import scala.collection.mutable
-
+  import scala.collection.mutable.ListBuffer
+  import scala.util.Random
   object AgentActor {
     def props(agentName: String, password: String): Props = Props(new AgentActor(agentName: String, password: String))
   }
@@ -39,6 +40,17 @@ package actors {
     val knownAgents: mutable.Map[String, KnownAgent] = mutable.Map.empty
     var knownTasks: mutable.Map[String, Task] = mutable.Map.empty
     var taskRegistry: mutable.Map[String, TaskTeamRegistry] = mutable.Map.empty
+
+    //Metrics
+    var lastStepStart: Long = 0L
+    var totalStepDuration: Long = 0L
+    val stepTimes = ListBuffer[Long]()
+    var steps: Set[Coordinate] = Set.empty
+    var countMove: Int = 0
+    var totalAttach: Int = 0
+    var failedAttach: Int = 0
+    var totalMessage: Int = 0
+    var totalSkips: Int = 0
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -114,20 +126,37 @@ package actors {
               println("🚀 Simulation started. Team " + team + ":" + teamSize)
             //                println("Roles: " + roles + allRoles)
             case "request-action" =>
-
+              lastStepStart = System.nanoTime()
               val energy = json.hcursor.downField("content").downField("percept").get[Int]("energy").getOrElse(0)
               val lastActionParams = json.hcursor.downField("content").downField("percept").get[Vector[String]]("lastActionParams").getOrElse(Vector()).mkString(",")
               val lastAction = json.hcursor.downField("content").downField("percept").get[String]("lastAction").getOrElse("")
               val lastActionResult = json.hcursor.downField("content").downField("percept").get[String]("lastActionResult").getOrElse("")
 
+              val ratio: Double = totalMessage / (currentStep + 1)
+              println(agentName + " sent " + totalMessage + " in " + currentStep + " steps, for a total of " + ratio + " messages per step")
+
               if (lastAction == "move" && lastActionResult == "success") {
                 globalPosition = globalPosition + Coordinate.fromDirection(lastActionParams)
+                steps = steps + globalPosition
+                countMove += 1
+                println(agentName + " moved " + countMove + " times to " + steps.size + " unique positions for a total of " + (countMove/steps.size).toLong + " moves per tile")
               }
 
               if (lastAction == "attach" && lastActionResult == "success") {
+                totalAttach += 1
                 val rel = Coordinate.fromDirection(lastActionParams)
                 attached = rel +: attached
+              } else if (lastAction == "attach" && lastActionResult != "success") {
+                totalAttach += 1
+                failedAttach += 1
               }
+
+              if (lastAction == "skip") {
+                totalSkips += 1
+              }
+              println(agentName + " has been idle for " + totalSkips + " out of " + currentStep + " steps")
+
+              println(agentName + " attempted " + totalAttach + " attaches, but failed " + failedAttach)
 
               if (lastAction == "detach" && lastActionResult == "success") {
                 val rel = Coordinate.fromDirection(lastActionParams)
@@ -148,7 +177,14 @@ package actors {
               }
 
               println(agentName + " is sending action: " + action.noSpaces)
+
+              stepTimes += System.nanoTime() - lastStepStart
+              def calculateAverage(times: Seq[Long]): Double =
+                if (times.isEmpty) 0.0 else times.sum.toDouble / times.size
+              //println(agentName + "'s Average Time / Step: " + calculateAverage(stepTimes) + " Len: " + stepTimes.length + " Step: " + currentStep)
+
               sendMessage(action)
+
             case "sim-end" =>
               println("🏁 Simulation ended.")
 
@@ -173,6 +209,7 @@ package actors {
         senderPercept = observation.things
       )
       for (i <- 1 to teamSize if s"agent$team$i" != agentName) {
+        totalMessage += 1
         context.actorSelection(s"/user/agent$team$i") ! message
       }
     }
@@ -213,15 +250,24 @@ package actors {
           translatedKnownAgents = translatedKnownAgents
         )
 
+        println(this.agentName + " send MapShare to " + agentName + " at step " + currentStep + ", timestamp = " + System.nanoTime())
+
         // Step 6: Send to the agent via actor selection
+        totalMessage += 1
         context.actorSelection(s"/user/$agentName") ! shareMessage
       }
     }
 
 
     def handleWhoIsHere(msg: WhoIsHere): Unit = {
+
       if (msg.senderStep != currentStep) {
-        println(agentName + " received an old message from " + msg.senderName + " at step " + msg.senderStep + " while the current step is " + currentStep)
+//        println(agentName + " received an old message from " + msg.senderName + " at step " + msg.senderStep + " while the current step is " + currentStep)
+        return
+      }
+
+      val randomNumber = Random.nextInt(10) + 1
+      if (randomNumber <= 3) {
         return
       }
 
@@ -268,6 +314,9 @@ package actors {
     }
 
     def handleMapShare(msg: ShareMap): Unit = {
+
+      println(this.agentName + " receives MapShare from " + msg.senderName + " at step " + currentStep + ", timestamp = " + System.nanoTime())
+
       knownAgents.get(msg.senderName).foreach { known =>
 
         // 1. Merge global map
@@ -297,18 +346,17 @@ package actors {
 
     def handleTaskTeamRegistryUpdate(remote: TaskTeamRegistry): Unit = {
 
-
       val taskId = remote.taskId
       val localOpt = taskRegistry.get(taskId)
       val totalRequired = knownTasks.get(remote.taskId).map(_.requirements.size).getOrElse(0)
-      println(agentName + " received a task status update for " + remote.taskId + " with " + totalRequired + " requirements at step " + this.currentStep)
+      //println(agentName + " received a task status update for " + remote.taskId + " with " + totalRequired + " requirements at step " + this.currentStep)
 
 
       val merged = localOpt match {
         case Some(local) => local.mergeWith(remote, totalRequired)
         case None => remote
       }
-      println(agentName + " merge result: " + merged)
+      //println(agentName + " merge result: " + merged)
       taskRegistry.update(taskId, merged)
     }
 
@@ -321,8 +369,9 @@ package actors {
         } else {
           registry.assemblies.flatMap(a => a.supporters ).toSet
         }
-      println(agentName + " is broadcasting to " + allAgentsToInform + " | " + registry + " | " + knownAgents + " | " + shouldBroadcastToAll(registry, totalRequired))
+      //println(agentName + " is broadcasting to " + allAgentsToInform + " | " + registry + " | " + knownAgents + " | " + shouldBroadcastToAll(registry, totalRequired))
       allAgentsToInform.foreach { agentId =>
+        totalMessage += 1
         context.actorSelection(s"/user/$agentId") ! registry
       }
     }
@@ -434,6 +483,7 @@ package actors {
         goalZones = goalZones,
         knownGoalZones = knownGoalZones,
         knownRoleZones = knownRoleZones,
+        taskRegistry = taskRegistry,
         knownAgents = knownAgents
       )
     }

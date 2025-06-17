@@ -30,7 +30,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
       }
     }
     println(observation.agentId + " is finding a path from " + observation.currentPos + " to " + target)
-    findPath(observation.globalMap, observation.currentPos, target, observation.visionRadius) match {
+    findPath(observation.globalMap, observation.currentPos, target) match {
       case Right(nextCoord: Coordinate) =>
         println(observation.agentId + " found a path from " + observation.currentPos + " to " + nextCoord)
         val direction = observation.currentPos.toDirection(nextCoord)
@@ -64,22 +64,19 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     }
   }
 
-  def computeMovementWithBlock(
-                                observation: Observation,
-                                target: Coordinate // (-3, -2)
-                              ): Option[AgentAction] = {
-    val directionOpt = observation.currentPos.toDirection(target) // e
+  def computeMovementWithBlock(observation: Observation, target: Coordinate): Option[AgentAction] = {
+    val directionOpt = observation.currentPos.toDirection(target)
     if (directionOpt.isEmpty) return None
     val direction = directionOpt.get
 
-    val blockRel = observation.attached.head // (0, 1)
-    val moveVector = target - observation.currentPos //(-1, 0)
-    val blockAbs = observation.currentPos + blockRel // (-2,-2) + (0, 1) = (-2, -1)
-    val futureBlock = target + blockRel // (-3, -2) + (0, 1) = (-3, -1)
+    val blockRel = observation.attached.head
+    val moveVector = target - observation.currentPos
+    val blockAbs = observation.currentPos + blockRel
+    val futureBlock = target + blockRel
 
-    val blockIsBehind = blockRel == Coordinate(-moveVector.x, -moveVector.y) //false
-    val targetOk = observation.isEmpty(target) || target == blockAbs //true
-    val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos //false
+    val blockIsBehind = blockRel == Coordinate(-moveVector.x, -moveVector.y)
+    val targetOk = observation.isEmpty(target) || target == blockAbs
+    val blockOk = observation.isEmpty(futureBlock) || futureBlock == observation.currentPos
 
     if (targetOk && blockOk) {
       return Some(MoveAction(direction))
@@ -155,12 +152,7 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
   }
 
 
-  private def findPath(
-                        map: mutable.Map[Coordinate, Thing],
-                        start: Coordinate,
-                        goal: Coordinate,
-                        vision: Int
-                      ): Either[Coordinate, Coordinate] = { // Left = obstacle, Right = first step toward goal
+  private def findPath(map: mutable.Map[Coordinate, Thing], start: Coordinate, goal: Coordinate): Either[Coordinate, Coordinate] = { // Left = obstacle, Right = first step toward goal
     val open = mutable.PriorityQueue[(Coordinate, Int)]()(Ordering.by(-_._2))
     val cameFrom = mutable.Map[Coordinate, Coordinate]()
     val gScore = mutable.Map(start -> 0)
@@ -168,19 +160,13 @@ class PathExecutor(clearPlanner: ClearPlanner = new DefaultClearPlanner()) exten
     var firstObstacle: Option[Coordinate] = None
 
     open.enqueue((start, fScore(start)))
-
     while (open.nonEmpty) {
       val (current, _) = open.dequeue()
-
       if (current == goal) return Right(reconstructFirstStep(cameFrom, current, start).get)
-
       for (n <- current.neighbors(1, includeDiagonals = false) if canMoveOrClear(map, n)) {
-
         val blocked = map.get(n).exists(v => Set("obstacle", "block").contains(v.`type`))
         val tentative = gScore(current) + 1
-
         val value = map.get(n)
-
         if (tentative < gScore.getOrElse(n, 60)) {
           cameFrom(n) = current
           gScore(n) = tentative

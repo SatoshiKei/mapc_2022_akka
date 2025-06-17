@@ -63,9 +63,18 @@ case class Observation(
     println(agentId + " Role Zones: " + getKnownRoleZones.size + " Goal Zones: " + getKnownGoalZones.size + " Global Map: " + globalMap.size + " Step: " + simulation.getSimulationStep + " Dispensers: " + knownDispenserSummary())
   }
 
+//  def visionRadius: Int = {
+//    simulation.getAllRoles.find(role => role.name == currentRole.get).get.vision
+//  }
+
   def visionRadius: Int = {
-    simulation.getAllRoles.find(role => role.name == currentRole.get).get.vision
+    val allRoles = simulation.getAllRoles
+    def getVision(roleName: String): Option[Int] = {
+      allRoles.find(_.name == roleName).flatMap(role => Option(role.vision))
+    }
+    currentRole.flatMap(getVision).orElse(getVision("default")).getOrElse(5) //TODO - Find out why it's null sometimes, it should always fallback to "default"
   }
+
 
   def getKnownRoleZones: Set[Coordinate] = {
     knownRoleZones.collect {

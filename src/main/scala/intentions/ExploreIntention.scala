@@ -26,27 +26,12 @@ class ExploreIntention() extends Intention with ScoredIntention {
     val maxBlocks = observation.simulation.getMaxBlockRegulation
     val attached = observation.attached
     if (attached.size > 1 || maxBlocks.exists(_ < attached.size)) {
-      if (detachBlocksIntention.isEmpty) {
-        detachBlocksIntention = Some(new DetachBlocksIntention())
-      }
+      if (detachBlocksIntention.isEmpty) {detachBlocksIntention = Some(new DetachBlocksIntention())}
       return detachBlocksIntention.get.planNextAction(observation)
     }
 
-    // 2. Adopt role if needed
-    val reservedRole = observation.simulation.getReservedRoles().get(observation.agentId)
-    if (reservedRole.isDefined && !observation.currentRole.contains(reservedRole.get.name)) {
-      if (adoptRoleIntention.isEmpty) {
-        adoptRoleIntention = Some(new AdoptRoleIntention(reservedRole.get.name))
-      }
-      return adoptRoleIntention.get.planNextAction(observation)
-    }
-
-    // 3. Determine new travel target if needed
-    if (
-      currentTravelIntention.isEmpty ||
-        currentTravelIntention.exists(_.checkFinished(observation)) ||
-        (!relocating && !observation.isUnknown(currentTravelIntention.get.target))
-    ) {
+    // 2. Determine new travel target if needed
+    if (currentTravelIntention.isEmpty || currentTravelIntention.exists(_.checkFinished(observation)) || (!relocating && !observation.isUnknown(currentTravelIntention.get.target))) {
       relocating = false
 
       val maybeTarget = observation.findClosestUnknownFromStartingLocation(new Coordinate(0,0), observation.currentPos, observation.visionRadius)
@@ -55,11 +40,10 @@ class ExploreIntention() extends Intention with ScoredIntention {
         observation.findRandomFarCoordinate()
       }
       println(observation.agentId + " exploring target: " + target)
-
       currentTravelIntention = Some(new TravelIntention(target))
     }
 
-    // 4. Execute travel
+    // 3. Execute travel
     currentTravelIntention.get.planNextAction(observation)
   }
 

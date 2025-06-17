@@ -23,7 +23,7 @@ class AttachFirstBlockIntention(blockType: String, position: Coordinate) extends
 
     //TODO - Check if range 1 attachment
     if (observation.attached.nonEmpty && !observation.isBlockAttached(blockType)) {
-      DetachAction(Coordinate.toDirection(observation.attached.head).get)
+      return DetachAction(Coordinate.toDirection(observation.attached.head).get)
     }
 
     if (observation.isBlockAttached(blockType)) {

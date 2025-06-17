@@ -1,6 +1,6 @@
 package intentions
 
-import action.{AttachAction, SkipAction, SubmitAction}
+import action.{AttachAction, DetachAction, SkipAction, SubmitAction}
 import model._
 
 import scala.collection.mutable
@@ -38,7 +38,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
 
     // Step 0: Get the TaskAssemblyStatus (and commit if needed)
     val registry = getOrInitTask(observation)
-    val assembly: TaskAssembly = registry.getAssembly(observation.agentId) match {
+    var assembly: TaskAssembly = registry.getAssembly(observation.agentId) match {
       case Some(value) =>
         value
       case None =>
@@ -46,36 +46,60 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
         return SkipAction()
     }
 
-    // Step 1: Find all attachable requirement coordinates
-    val attachableOffsets = Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0))
+    val hasAssignment = assembly.participantAssignments.exists(_.name == observation.agentId)
 
-    val candidateAssignments = task.requirements.filter { req =>
-      attachableOffsets.contains(req.coordinate)
+    if (!hasAssignment) {
+      val assignedCoords = assembly.participantAssignments.map(_.coordinate).toSet
+      val unassigned = task.requirements.filterNot(r => assignedCoords.contains(r.coordinate))
+
+      unassigned.headOption.foreach { free =>
+        val updatedAssignment = ParticipantAssignment(observation.agentId, free.coordinate, free.`type`)
+        val updatedAssignments = assembly.participantAssignments + updatedAssignment
+
+        val updatedAssembly = assembly.copy(participantAssignments = updatedAssignments)
+        val updatedAssemblies = registry.assemblies.map {
+          case a if a == assembly => updatedAssembly
+          case other => other
+        }
+        assembly = updatedAssembly
+        val updatedRegistry = registry.copy(assemblies = updatedAssemblies)
+        observation.taskRegistry.update(task.name, updatedRegistry)
+
+        println(s"${observation.agentId} assigned missing requirement ${free.coordinate} for ${task.name}")
+      }
     }
 
-    // Step 2: Try to pick one assigned to this agent, or unassigned
-    val requirement = candidateAssignments.find { req =>
-      val matchingAssignmentOpt = assembly.participantAssignments.find(_.coordinate == req.coordinate)
+    // Step 1: Find all attachable requirement coordinates
+    //val attachableOffsets = Set(Coordinate(0, 1), Coordinate(0, -1), Coordinate(1, 0), Coordinate(-1, 0))
 
-      matchingAssignmentOpt match {
-        case Some(assignment) => assignment.name == observation.agentId
-        case None => true // unassigned, we can take it
-      }
+//    val candidateAssignments = task.requirements.filter { req =>
+//      attachableOffsets.contains(req.coordinate)
+//    }
+
+    // Step 2: Try to pick one assigned to this agent, or unassigned
+    val requirement: TaskRequirement = {
+      val assignment = assembly.participantAssignments.find(_.name == observation.agentId).get
+      task.requirements.find(_.coordinate == assignment.coordinate).get
+    }
+
+    if (observation.attached.nonEmpty && !observation.isBlockAttached(requirement.`type`)) {
+      println(observation.agentId + "Detaching block to search for new requirement: " + requirement.`type`)
+      return DetachAction(Coordinate.toDirection(observation.attached.head).get)
     }
 
 
     // Step 2: If no adjacent block found, fallback to Explore for now
-    if (requirement.isEmpty ) {
-      println(s"${observation.agentId} found no immediate attachable block for ${task.name}")
-      if (!subIntention.exists(_.isInstanceOf[ExploreIntention])) subIntention = Some(new ExploreIntention())
-      return subIntention.get.planNextAction(observation)
-    }
+//    if (requirement.isEmpty ) {
+//      println(s"${observation.agentId} found no immediate attachable block for ${task.name}")
+//      if (!subIntention.exists(_.isInstanceOf[ExploreIntention])) subIntention = Some(new ExploreIntention())
+//      return subIntention.get.planNextAction(observation)
+//    }
 
     // Step 3: Delegate to AttachFirstBlockIntention for the correct block type
-    val blockType = requirement.get.`type`
+    val blockType = requirement.`type`
     if ((subIntention.isEmpty || !subIntention.get.isInstanceOf[AttachFirstBlockIntention]) && observation.attached.isEmpty) {
 //      println(observation.agentId + " is pursuing requirement for " + task.name + " for recepient " + assembly.recipient + " with " + assembly.committedAgents + " as helpers")
-      subIntention = Some(new AttachFirstBlockIntention(blockType, requirement.get.coordinate))
+      subIntention = Some(new AttachFirstBlockIntention(blockType, requirement.coordinate))
     }
 
     if (assembly != null) {
@@ -83,19 +107,20 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     }
 
     //Step 5: Deliver the task
-    if (observation.attached.size == 1) {
+    if (observation.attached.nonEmpty) {
 
       if (!observation.simulation.getRolesWithAction("submit").contains(observation.currentRole.getOrElse("standard"))) {
         println(observation.agentId + " is looking for role to submit task")
         subIntention = Some(new AdoptRoleIntention(observation.simulation.getRolesWithAction("submit").headOption.get))
       } else {
         val goal = observation.translateRemoteCoordinate(assembly.goalZone).getOrElse(goalZone)
-        if (observation.currentPos == goal) {
+        println(observation.agentId + " ")
+        if (observation.knownGoalZones.contains(observation.currentPos)) {
           val allRequirementsMet = observation.allRequirementsMet(task)
           if (allRequirementsMet) {
             SubmitAction(task.name)
           } else {
-            subIntention = Some(new ConnectBlocksIntention(task, goalZone))
+            subIntention = Some(new ConnectBlocksIntention(task, goal))
           }
         } else {
           println(observation.agentId + "is traveling to a goal zone at " + goal)
@@ -123,7 +148,7 @@ class CompleteTaskIntention(task: Task, goalZone: Coordinate) extends ScoredInte
     val newParticipant = Participant(agentId, step)
 
     def createNewAssembly(): TaskAssembly = {
-      println(observation.agentId + " is creating a new assembly at " + observation.simulation.getSimulationStep)
+      println(observation.agentId + " is creating a new assembly at " + observation.simulation.getSimulationStep + " | registry: " + observation.taskRegistry)
       val goal = SharedCoordinate(goalZone.x, goalZone.y, agentId)
       TaskAssembly(
         goalZone = goal,
