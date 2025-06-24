@@ -45,12 +45,16 @@ package actors {
     var lastStepStart: Long = 0L
     var totalStepDuration: Long = 0L
     val stepTimes = ListBuffer[Long]()
+    val averageTimes = ListBuffer[Double]()
     var steps: Set[Coordinate] = Set.empty
+    val stepsData = ListBuffer[Double]()
     var countMove: Int = 0
     var totalAttach: Int = 0
     var failedAttach: Int = 0
     var totalMessage: Int = 0
     var totalSkips: Int = 0
+    var averageAttachFails = ListBuffer[Double]()
+    var averageMessagesPerStep = ListBuffer[Double]()
 
     override def preStart(): Unit = {
       println("Connecting to MASSim...")
@@ -126,20 +130,25 @@ package actors {
               println("🚀 Simulation started. Team " + team + ":" + teamSize)
             //                println("Roles: " + roles + allRoles)
             case "request-action" =>
-              lastStepStart = System.nanoTime()
+              lastStepStart = System.currentTimeMillis()
               val energy = json.hcursor.downField("content").downField("percept").get[Int]("energy").getOrElse(0)
               val lastActionParams = json.hcursor.downField("content").downField("percept").get[Vector[String]]("lastActionParams").getOrElse(Vector()).mkString(",")
               val lastAction = json.hcursor.downField("content").downField("percept").get[String]("lastAction").getOrElse("")
               val lastActionResult = json.hcursor.downField("content").downField("percept").get[String]("lastActionResult").getOrElse("")
 
-              val ratio: Double = totalMessage / (currentStep + 1)
+              val ratio = totalMessage.toDouble / (currentStep + 1).toDouble
               println(agentName + " sent " + totalMessage + " in " + currentStep + " steps, for a total of " + ratio + " messages per step")
+              averageMessagesPerStep += ratio
+              println(agentName + " average messages per step: " + averageMessagesPerStep)
 
               if (lastAction == "move" && lastActionResult == "success") {
                 globalPosition = globalPosition + Coordinate.fromDirection(lastActionParams)
                 steps = steps + globalPosition
                 countMove += 1
-                println(agentName + " moved " + countMove + " times to " + steps.size + " unique positions for a total of " + (countMove/steps.size).toLong + " moves per tile")
+                val averageStep = (countMove.toDouble/steps.size.toDouble)
+                stepsData += averageStep
+                println(agentName + " moved " + countMove + " times to " + steps.size + " unique positions for a total of " + averageStep + " moves per tile")
+                println(agentName + " moves per tile: " + stepsData)
               }
 
               if (lastAction == "attach" && lastActionResult == "success") {
@@ -157,6 +166,10 @@ package actors {
               println(agentName + " has been idle for " + totalSkips + " out of " + currentStep + " steps")
 
               println(agentName + " attempted " + totalAttach + " attaches, but failed " + failedAttach)
+
+              val failAttachRate = failedAttach.toDouble / totalAttach.toDouble
+              averageAttachFails += failAttachRate
+              println(agentName + " average attach fails: " + averageAttachFails)
 
               if (lastAction == "detach" && lastActionResult == "success") {
                 val rel = Coordinate.fromDirection(lastActionParams)
@@ -178,11 +191,13 @@ package actors {
 
               println(agentName + " is sending action: " + action.noSpaces)
 
-              stepTimes += System.nanoTime() - lastStepStart
+              stepTimes += System.currentTimeMillis() - lastStepStart
               def calculateAverage(times: Seq[Long]): Double =
                 if (times.isEmpty) 0.0 else times.sum.toDouble / times.size
               //println(agentName + "'s Average Time / Step: " + calculateAverage(stepTimes) + " Len: " + stepTimes.length + " Step: " + currentStep)
-
+              val averageTime = calculateAverage(stepTimes)
+              averageTimes += averageTime
+              println(averageTimes)
               sendMessage(action)
 
             case "sim-end" =>
